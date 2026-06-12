@@ -21,7 +21,7 @@ Controller -> Service -> Prisma -> PostgreSQL
 - `PrismaService`: Prisma Client를 NestJS provider로 연결하는 DB 접근 계층
 - `ConfigModule`: 실행 환경별 설정을 로딩하는 계층
 
-Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에 별도로 정리한다.
+Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에, NestJS decorator 문법은 `docs/nestjs-decorators.md`에 별도로 정리한다.
 
 초기 학습 단계에서는 인증, Redis, queue, 복잡한 architecture pattern을 한꺼번에 넣기보다, 작은 CRUD API를 통해 NestJS의 module, provider, controller, pipe, test 구조를 먼저 익히는 것이 목표다.
 

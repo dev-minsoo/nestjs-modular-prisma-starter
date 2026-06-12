@@ -22,6 +22,8 @@ Spring Boot와 비교하면 대략 다음처럼 볼 수 있다.
 | `ValidationPipe` | validation layer, `@Valid` 흐름 | request DTO validation |
 | `Exception` | `ResponseStatusException`, custom exception | HTTP 에러 응답 변환 |
 
+NestJS decorator와 Spring annotation의 자세한 비교는 `docs/nestjs-decorators.md`에 정리한다.
+
 ## Module Structure
 
 NestJS는 feature 단위로 module을 명시적으로 구성한다.

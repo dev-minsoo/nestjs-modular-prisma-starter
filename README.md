@@ -1,6 +1,6 @@
 # NestJS Modular Prisma Sample
 
-NestJS 입문용 서버 애플리케이션 샘플입니다. Java/Spring Boot에 익숙한 개발자가 NestJS의 기본 구조를 빠르게 볼 수 있도록, 공식 Nest CLI 프로젝트를 기반으로 NestJS에서 흔한 module-based 구조, Prisma, PostgreSQL, Swagger, validation을 얹었습니다.
+NestJS 입문용 서버 애플리케이션 샘플입니다. 공식 Nest CLI 프로젝트를 기반으로 module-based 구조, Prisma, PostgreSQL, Swagger, validation, environment profile을 얹었습니다.
 
 ## Stack
 
@@ -20,6 +20,8 @@ NestJS 입문용 서버 애플리케이션 샘플입니다. Java/Spring Boot에 
 src/
   app/
     app.module.ts
+  config/
+    environment.ts
   database/
     database.module.ts
     prisma.service.ts
@@ -35,22 +37,23 @@ src/
   main.ts
 ```
 
-Spring Boot 기준으로 보면:
+주요 역할:
 
-- `users.controller.ts` = `UserController`
-- `users.service.ts` = `UserService`
-- `users.module.ts` = NestJS 모듈 단위 설정/조립
-- `prisma.service.ts` = Prisma Client를 Nest DI에 연결하는 provider
-- `dto/*.ts` = request/response DTO
+- `app.module.ts`: root module
+- `config/environment.ts`: environment profile loading and validation
+- `prisma.service.ts`: Prisma Client provider
+- `users.controller.ts`: users HTTP endpoints
+- `users.service.ts`: users business logic and database access coordination
+- `dto/*.ts`: request, query, response DTOs
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env
+cp .env.local.example .env.local
 npm run docker:up
 npm run db:migrate -- --name init
-npm run start:dev
+npm run start:local
 ```
 
 Swagger UI:
@@ -69,7 +72,7 @@ Users API:
 
 ```text
 POST   /api/users
-GET    /api/users
+GET    /api/users?page=1&pageSize=20&search=minsoo&orderBy=createdAt&orderDirection=desc
 GET    /api/users/:id
 PATCH  /api/users/:id
 DELETE /api/users/:id
@@ -83,10 +86,76 @@ curl -X POST http://localhost:3000/api/users \
   -d '{"email":"minsoo@example.com","name":"Minsoo Kim"}'
 ```
 
+List response:
+
+```json
+{
+  "items": [
+    {
+      "id": "2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524",
+      "email": "minsoo@example.com",
+      "name": "Minsoo Kim",
+      "createdAt": "2026-06-11T05:00:00.000Z",
+      "updatedAt": "2026-06-11T05:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+List query options:
+
+```text
+page            positive integer, default 1
+pageSize        1-100, default 20
+search          searches email and name
+orderBy         createdAt | updatedAt | email | name
+orderDirection  asc | desc
+```
+
+Duplicate email은 `409 Conflict`, 없는 user 조회/수정/삭제는 `404 Not Found`로 응답합니다.
+
+## Environment Profiles
+
+이 프로젝트는 `APP_ENV`로 실행 환경을 나눕니다.
+
+```text
+APP_ENV=local  # local machine, default
+APP_ENV=dev    # shared development environment
+APP_ENV=prod   # production runtime
+APP_ENV=test   # Jest/test runtime
+```
+
+환경 파일은 profile에 따라 다음 순서로 읽습니다. 앞쪽 파일이 더 높은 우선순위입니다.
+
+```text
+local: .env.local -> .env
+dev:   .env.dev.local -> .env.dev -> .env
+prod:  .env.prod.local -> .env.prod -> .env
+test:  .env.test.local -> .env.test -> .env
+```
+
+`APP_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`을 사용할 수 있습니다. `DATABASE_URL`은 필수이며 누락되거나 PostgreSQL URL이 아니면 앱이 부팅에 실패합니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
+
+Example:
+
+```bash
+npm run start:profile:dev
+npm run start:prod
+```
+
 ## Scripts
 
 ```bash
-npm run start:dev     # local dev server
+npm run start:local   # local dev server with APP_ENV=local
+npm run start:dev     # alias for local watch mode
+npm run start:profile:dev
+npm run start:prod    # production build runner with APP_ENV=prod
 npm run build         # compile
 npm run lint          # eslint
 npm test              # unit tests

@@ -1,0 +1,7 @@
+-- CreateEnum
+CREATE TYPE "Role" AS ENUM ('USER', 'ADMIN');
+
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN "password_hash" TEXT NOT NULL DEFAULT '$2b$10$2nsjhduLO3i3y0Yd34FgEuR/iDCJUUA3A3MY89jQ4FnixuAVPkGuq';
+ALTER TABLE "users" ADD COLUMN "role" "Role" NOT NULL DEFAULT 'USER';
+ALTER TABLE "users" ALTER COLUMN "password_hash" DROP DEFAULT;

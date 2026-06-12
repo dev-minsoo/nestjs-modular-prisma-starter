@@ -3,11 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PasswordService } from '../../common/security';
 import {
   createPaginatedResult,
   getPaginationParams,
 } from '../../common/pagination';
 import { Prisma } from '../../generated/prisma/client';
+import { Role } from '../../generated/prisma/enums';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import {
@@ -16,16 +18,29 @@ import {
   UserListOrderDirection,
 } from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { toUserResponse } from './utils/user-response.mapper';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly passwordService: PasswordService,
+  ) {}
 
   async create(dto: CreateUserDto) {
+    const passwordHash = await this.passwordService.hash(dto.password);
+
     try {
-      return await this.prisma.user.create({
-        data: dto,
+      const user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          name: dto.name,
+          passwordHash,
+          role: dto.role ?? Role.USER,
+        },
       });
+
+      return toUserResponse(user);
     } catch (error) {
       this.handlePrismaError(error);
     }
@@ -45,7 +60,7 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    return createPaginatedResult(items, total, query);
+    return createPaginatedResult(items.map(toUserResponse), total, query);
   }
 
   async findOne(id: string) {
@@ -57,15 +72,17 @@ export class UsersService {
       throw new NotFoundException(`User ${id} was not found`);
     }
 
-    return user;
+    return toUserResponse(user);
   }
 
   async update(id: string, dto: UpdateUserDto) {
     try {
-      return await this.prisma.user.update({
+      const user = await this.prisma.user.update({
         where: { id },
         data: dto,
       });
+
+      return toUserResponse(user);
     } catch (error) {
       this.handlePrismaError(error, id);
     }
@@ -73,9 +90,11 @@ export class UsersService {
 
   async remove(id: string) {
     try {
-      return await this.prisma.user.delete({
+      const user = await this.prisma.user.delete({
         where: { id },
       });
+
+      return toUserResponse(user);
     } catch (error) {
       this.handlePrismaError(error, id);
     }

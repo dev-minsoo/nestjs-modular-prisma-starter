@@ -5,6 +5,7 @@ import { HttpExceptionFilter } from '../common/errors';
 import { LoggingModule } from '../common/logging';
 import { getEnvFilePaths, validateEnvironment } from '../config/environment';
 import { DatabaseModule } from '../database/database.module';
+import { AuthModule } from '../modules/auth';
 import { HealthModule } from '../modules/health/health.module';
 import { UsersModule } from '../modules/users/users.module';
 
@@ -18,6 +19,7 @@ import { UsersModule } from '../modules/users/users.module';
     LoggingModule,
     DatabaseModule,
     HealthModule,
+    AuthModule,
     UsersModule,
   ],
   providers: [

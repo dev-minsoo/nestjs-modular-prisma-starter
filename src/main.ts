@@ -33,6 +33,7 @@ async function bootstrap() {
     .setTitle('NestJS Modular Prisma Sample')
     .setDescription('Module-based NestJS REST API with Prisma and PostgreSQL')
     .setVersion('1.0.0')
+    .addBearerAuth()
     .build();
 
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);

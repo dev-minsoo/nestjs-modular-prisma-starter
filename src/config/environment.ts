@@ -9,6 +9,7 @@ export type ValidatedEnvironment = RawEnvironment & {
   PORT: number;
   DATABASE_URL: string;
   CORS_ORIGINS: string[];
+  JWT_ACCESS_TOKEN_SECRET: string;
 };
 
 const NODE_ENV_ALIASES: Record<string, AppEnvironment> = {
@@ -54,6 +55,10 @@ export function validateEnvironment(config: RawEnvironment) {
   const port = parsePort(readOptionalString(config.PORT));
   const databaseUrl = parseDatabaseUrl(readOptionalString(config.DATABASE_URL));
   const corsOrigins = parseCorsOrigins(readOptionalString(config.CORS_ORIGIN));
+  const jwtAccessTokenSecret = parseJwtAccessTokenSecret(
+    readOptionalString(config.JWT_ACCESS_TOKEN_SECRET),
+    appEnv,
+  );
 
   return {
     ...config,
@@ -61,6 +66,7 @@ export function validateEnvironment(config: RawEnvironment) {
     PORT: port,
     DATABASE_URL: databaseUrl,
     CORS_ORIGINS: corsOrigins,
+    JWT_ACCESS_TOKEN_SECRET: jwtAccessTokenSecret,
   } satisfies ValidatedEnvironment;
 }
 
@@ -137,4 +143,19 @@ function parseCorsOrigins(value: string | undefined): string[] {
   }
 
   return origins;
+}
+
+function parseJwtAccessTokenSecret(
+  value: string | undefined,
+  appEnv: AppEnvironment,
+): string {
+  if (value?.trim()) {
+    return value;
+  }
+
+  if (appEnv === 'test') {
+    return 'test-jwt-access-token-secret';
+  }
+
+  throw new Error('JWT_ACCESS_TOKEN_SECRET is required');
 }

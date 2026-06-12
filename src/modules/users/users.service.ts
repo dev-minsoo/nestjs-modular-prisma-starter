@@ -6,6 +6,11 @@ import {
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import {
+  ListUsersQueryDto,
+  UserListOrderBy,
+  UserListOrderDirection,
+} from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
@@ -22,12 +27,31 @@ export class UsersService {
     }
   }
 
-  findAll() {
-    return this.prisma.user.findMany({
-      orderBy: {
-        createdAt: 'desc',
+  async findAll(query: ListUsersQueryDto = new ListUsersQueryDto()) {
+    const page = query.page;
+    const pageSize = query.pageSize;
+    const where = this.buildWhere(query.search);
+    const orderBy = this.buildOrderBy(query.orderBy, query.orderDirection);
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      items,
+      meta: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
       },
-    });
+    };
   }
 
   async findOne(id: string) {
@@ -43,32 +67,82 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto) {
-    await this.findOne(id);
-
     try {
       return await this.prisma.user.update({
         where: { id },
         data: dto,
       });
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handlePrismaError(error, id);
     }
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-
-    return this.prisma.user.delete({
-      where: { id },
-    });
+    try {
+      return await this.prisma.user.delete({
+        where: { id },
+      });
+    } catch (error) {
+      this.handlePrismaError(error, id);
+    }
   }
 
-  private handlePrismaError(error: unknown): never {
+  private buildWhere(search?: string): Prisma.UserWhereInput | undefined {
+    const trimmedSearch = search?.trim();
+
+    if (!trimmedSearch) {
+      return undefined;
+    }
+
+    return {
+      OR: [
+        {
+          email: {
+            contains: trimmedSearch,
+            mode: 'insensitive',
+          },
+        },
+        {
+          name: {
+            contains: trimmedSearch,
+            mode: 'insensitive',
+          },
+        },
+      ],
+    };
+  }
+
+  private buildOrderBy(
+    orderBy: UserListOrderBy,
+    orderDirection: UserListOrderDirection,
+  ): Prisma.UserOrderByWithRelationInput {
+    switch (orderBy) {
+      case 'email':
+        return { email: orderDirection };
+      case 'name':
+        return { name: orderDirection };
+      case 'updatedAt':
+        return { updatedAt: orderDirection };
+      case 'createdAt':
+        return { createdAt: orderDirection };
+    }
+  }
+
+  private handlePrismaError(error: unknown, id?: string): never {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
       throw new ConflictException('A user with this email already exists');
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    ) {
+      throw new NotFoundException(
+        id ? `User ${id} was not found` : 'User was not found',
+      );
     }
 
     throw error;

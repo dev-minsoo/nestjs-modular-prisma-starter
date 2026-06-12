@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -17,6 +18,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { ListUsersResponseDto } from './dto/list-users-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
@@ -33,9 +36,9 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOkResponse({ type: UserResponseDto, isArray: true })
-  findAll() {
-    return this.usersService.findAll();
+  @ApiOkResponse({ type: ListUsersResponseDto })
+  findAll(@Query() query: ListUsersQueryDto) {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')

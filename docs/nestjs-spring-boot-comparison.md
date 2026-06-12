@@ -105,6 +105,28 @@ Spring Data JPA와 비교하면 다음처럼 대응된다.
 
 즉 Spring Data JPA는 pagination abstraction이 framework/data layer에 더 강하게 들어가 있고, NestJS + Prisma에서는 API 계약에 맞는 pagination shape을 애플리케이션에서 명시적으로 만드는 편이다.
 
+## Transaction Boundary
+
+Spring Boot에서는 보통 service method에 `@Transactional`을 붙여 transaction boundary를 선언한다.
+
+```java
+@Transactional
+public User signup(SignupRequest request) {
+  // repository calls
+}
+```
+
+NestJS + Prisma에서는 transaction boundary를 service code에서 명시적으로 호출한다.
+
+```ts
+await this.prisma.runInTransaction(async (tx) => {
+  // tx.user.count()
+  // tx.user.create()
+});
+```
+
+이 샘플은 `PrismaService.runInTransaction()` helper를 두고, `AuthService.signup()`에서 `ADMIN` 사용자 수 조회와 user 생성을 하나의 interactive transaction으로 묶는다. 자세한 비교와 Mermaid diagram은 `docs/nestjs-prisma-transactions.md`에 정리한다.
+
 ## Environment Profiles
 
 이 프로젝트는 `APP_ENV`로 실행 환경을 나눈다.

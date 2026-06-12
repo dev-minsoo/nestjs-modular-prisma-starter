@@ -57,6 +57,14 @@ src/
 - `users.service.ts`: users business logic and database access coordination
 - `dto/*.ts`: request, query, response DTOs
 
+## Learning Docs
+
+- `docs/learning-roadmap.md`: 학습 로드맵과 단계별 확장 방향
+- `docs/nestjs-spring-boot-comparison.md`: Spring Boot 관점의 NestJS 구조 비교
+- `docs/nestjs-request-lifecycle.md`: middleware, guard, interceptor, pipe, filter 요청 흐름
+- `docs/nestjs-prisma-transactions.md`: Spring `@Transactional`과 Prisma transaction 비교
+- `docs/nestjs-decorators.md`: NestJS decorator 문법 정리
+
 ## Setup
 
 ```bash

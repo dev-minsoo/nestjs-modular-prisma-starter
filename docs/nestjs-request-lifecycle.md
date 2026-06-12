@@ -93,17 +93,20 @@ sequenceDiagram
   participant AuthController
   participant AuthService
   participant PasswordService
-  participant Prisma
+  participant PrismaService
+  participant Tx as "Transaction Client"
   participant JwtService
 
   Client->>AuthController: POST /api/auth/signup<br/>email, name, password
   AuthController->>AuthService: signup(dto)
-  AuthService->>Prisma: ADMIN 사용자 수 조회
-  Prisma-->>AuthService: adminCount
   AuthService->>PasswordService: hash(password)
   PasswordService-->>AuthService: passwordHash
-  AuthService->>Prisma: user.create(email, name, passwordHash, role)
-  Prisma-->>AuthService: user
+  AuthService->>PrismaService: runInTransaction(callback)
+  PrismaService->>Tx: transaction 시작
+  Tx->>Tx: ADMIN 수 조회 후 role 결정
+  Tx->>Tx: user.create(email, name, passwordHash, role)
+  Tx-->>PrismaService: commit 후 user 반환
+  PrismaService-->>AuthService: user
   AuthService->>JwtService: signAsync({ sub, email, role })
   JwtService-->>AuthService: accessToken
   AuthService-->>AuthController: AuthResponse
@@ -166,4 +169,3 @@ sequenceDiagram
     RolesGuard-->>Client: 403 Forbidden
   end
 ```
-

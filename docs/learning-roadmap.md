@@ -39,6 +39,8 @@ Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에, NestJS d
 - DTO validation
 - Prisma known error mapping
 - Swagger/OpenAPI 문서
+- signup/login, JWT access token, role guard
+- Prisma transaction helper와 signup transaction boundary
 - `APP_ENV` 기반 environment profile
 - required environment variable validation
 - Docker Compose 기반 local PostgreSQL
@@ -127,14 +129,18 @@ Status: initial `HttpExceptionFilter` complete. HTTP request/response logging co
 
 `User` 하나만 있는 모델에서 벗어나 관계형 모델을 추가한다.
 
+Status: transaction boundary helper added. Relational model expansion pending.
+
 - `Post` 또는 `Todo` 모델 추가
 - `User 1:N Post` 관계 구성
 - relation query 실습
-- nested write와 transaction 예제 추가
+- nested write 예제 추가
 - cascade delete 정책 검토
 - seed 데이터 추가
 
 이 단계의 목적은 Prisma를 통해 관계형 데이터를 다루는 방법과 service layer에서 transaction boundary를 잡는 방법을 익히는 것이다.
+
+현재 transaction boundary 예제는 `AuthService.signup()`에 있다. `ADMIN` 사용자 수 조회와 user 생성을 `PrismaService.runInTransaction()`으로 묶고, `Serializable` isolation과 retry를 사용한다. Spring `@Transactional`과의 비교는 `docs/nestjs-prisma-transactions.md`에 정리한다.
 
 ### Phase 5. Authentication
 
@@ -207,12 +213,12 @@ Spring Boot에서 Logback pattern, JSON encoder, `OncePerRequestFilter`, MDC로 
 
 ## Suggested Next Step
 
-Phase 1, Phase 2, 공통 pagination, 공통 error response의 첫 구현이 들어간 뒤에는 운영 기본기를 하나씩 추가하는 것이 좋다.
+현재 학습 방향은 배포 준비보다 Spring Boot와 비교되는 NestJS runtime/application 구조를 하나씩 익히는 쪽이다.
 
-structured logging, DB connectivity health check, graceful shutdown을 먼저 진행했으므로 남은 우선순위는 다음과 같다.
+추천 우선순위는 다음과 같다.
 
-1. GitHub Actions로 lint/test/e2e/build 자동화
-2. Dockerfile과 production build/run 검증
-3. 이후 실제 DB 기반 e2e test 검토
+1. request context: Spring의 `SecurityContextHolder`, MDC와 비교하면서 `AsyncLocalStorage` 기반 request context를 실습한다.
+2. 실제 DB 기반 e2e test: mock e2e에서 벗어나 migration, seed, HTTP 요청, DB 검증을 연결한다.
+3. 관계형 모델링: `Post` 또는 `Todo`를 추가해 relation query, nested write, cascade 정책을 다룬다.
 
-이 순서로 진행하면 API contract를 유지하면서 운영에 필요한 기본기를 점진적으로 추가할 수 있다.
+CI, Dockerfile, 배포 workflow는 실제 배포를 준비할 때 다시 다룬다.

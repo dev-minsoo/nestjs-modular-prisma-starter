@@ -141,6 +141,74 @@ Prisma P2002 -> 409 Conflict
 Prisma P2025 -> 404 Not Found
 ```
 
+응답 형식을 전역으로 맞추는 방법은 Spring Boot의 `@ControllerAdvice` + `@ExceptionHandler`와 NestJS의 `ExceptionFilter`가 비슷한 역할을 한다.
+
+Spring Boot에서는 보통 다음처럼 controller 밖에 공통 예외 처리 클래스를 둔다.
+
+```java
+@RestControllerAdvice
+class GlobalExceptionHandler {
+  @ExceptionHandler(NotFoundException.class)
+  ResponseEntity<ErrorResponse> handleNotFound(NotFoundException exception) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(ErrorResponse.from(exception));
+  }
+}
+```
+
+NestJS에서는 `ExceptionFilter`를 만들고 `APP_FILTER` provider로 전역 등록한다.
+
+```ts
+@Catch(HttpException)
+export class HttpExceptionFilter implements ExceptionFilter<HttpException> {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const context = host.switchToHttp();
+    const response = context.getResponse<Response>();
+
+    response.status(exception.getStatus()).json({
+      statusCode: exception.getStatus(),
+      code: 'NOT_FOUND',
+      message: exception.message,
+    });
+  }
+}
+```
+
+이 샘플은 `src/common/errors/filters/http-exception.filter.ts`에서 HTTP exception 응답을 다음 형태로 표준화한다.
+
+```json
+{
+  "statusCode": 404,
+  "code": "NOT_FOUND",
+  "message": "User was not found",
+  "path": "/api/users/...",
+  "timestamp": "2026-06-12T05:00:00.000Z"
+}
+```
+
+Validation 실패는 `details` 배열을 추가한다.
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Validation failed",
+  "path": "/api/users",
+  "timestamp": "2026-06-12T05:00:00.000Z",
+  "details": ["email must be an email"]
+}
+```
+
+비교하면 다음과 같다.
+
+| Spring Boot | NestJS |
+| --- | --- |
+| `@RestControllerAdvice` | `ExceptionFilter` |
+| `@ExceptionHandler` | `@Catch()` |
+| `ResponseEntity<ErrorResponse>` | `response.status(...).json(...)` |
+| bean으로 등록 | `APP_FILTER` provider 또는 `app.useGlobalFilters()` |
+| validation error는 `MethodArgumentNotValidException` 등으로 처리 | validation error는 `ValidationPipe`가 `BadRequestException`을 만들고 filter가 변환 |
+
 ## Testing
 
 `*.spec.ts` 파일은 Jest 테스트 파일이다.

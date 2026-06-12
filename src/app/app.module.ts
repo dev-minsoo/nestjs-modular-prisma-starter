@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
+import { HttpExceptionFilter } from '../common/errors';
 import { getEnvFilePaths, validateEnvironment } from '../config/environment';
 import { DatabaseModule } from '../database/database.module';
 import { HealthModule } from '../modules/health/health.module';
@@ -15,6 +17,12 @@ import { UsersModule } from '../modules/users/users.module';
     DatabaseModule,
     HealthModule,
     UsersModule,
+  ],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
   ],
 })
 export class AppModule {}

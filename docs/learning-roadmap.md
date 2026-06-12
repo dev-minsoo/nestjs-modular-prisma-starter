@@ -35,6 +35,7 @@ Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에, NestJS d
 - `User` CRUD API
 - users list pagination, search, ordering
 - common pagination DTO/type/helper
+- common HTTP error response format
 - DTO validation
 - Prisma known error mapping
 - Swagger/OpenAPI 문서
@@ -104,6 +105,21 @@ NestJS의 공통 확장 지점을 하나씩 학습한다.
 - custom decorator
 - guard 기본 개념
 
+Status: initial `HttpExceptionFilter` complete.
+
+현재 HTTP exception 응답은 다음 형태로 표준화한다.
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Validation failed",
+  "path": "/api/users",
+  "timestamp": "2026-06-12T05:00:00.000Z",
+  "details": []
+}
+```
+
 이 단계에서는 기능을 크게 늘리기보다 NestJS가 제공하는 request lifecycle 확장 포인트를 실습한다.
 
 ### Phase 4. Relational Domain Modeling
@@ -155,21 +171,37 @@ NestJS의 공통 확장 지점을 하나씩 학습한다.
 - health check에서 DB connectivity 확인
 - graceful shutdown
 - structured logging
+- request/response logging middleware 또는 interceptor
+- local/dev/prod별 log format 분리
+- request id 또는 correlation id 추가
+- 민감한 header/body field masking 정책 정리
 - GitHub Actions 기반 lint/test/build
 - migration deploy workflow
+
+Spring Boot에서 Logback pattern, JSON encoder, `OncePerRequestFilter`, MDC로 request log와 trace id를 다루는 것처럼, NestJS에서는 logger provider, middleware/interceptor, request-scoped context를 조합해 같은 주제를 실습한다.
+
+예상 작업 단위는 다음과 같다.
+
+1. `LoggerModule` 또는 common logger provider 추가
+2. local은 사람이 읽기 쉬운 pretty log, dev/prod는 JSON log 사용
+3. HTTP request 시작/종료 로그 기록
+4. method, path, statusCode, durationMs, requestId 기록
+5. error response와 server error 로그 연결
+6. authorization, cookie 같은 민감한 값 masking
+7. README에 log field 예시와 profile별 log format 설명 추가
 
 이 단계는 학습용 샘플을 작은 production-like API로 발전시키는 과정이다.
 
 ## Suggested Next Step
 
-Phase 1과 Phase 2의 첫 구현이 들어간 뒤에는 공통 에러 응답 포맷을 정리하는 것이 좋다.
+Phase 1, Phase 2, 공통 pagination, 공통 error response의 첫 구현이 들어간 뒤에는 운영 기본기를 하나씩 추가하는 것이 좋다.
 
 우선순위는 다음과 같다.
 
-1. `HttpExceptionFilter` 추가
-2. validation, conflict, not found 응답 shape 통일
-3. Swagger error response DTO 추가
-4. users API e2e test 기대값을 공통 에러 응답 기준으로 수정
-5. 이후 DB health check 또는 CI 추가
+1. DB connectivity health check 추가
+2. GitHub Actions로 lint/test/e2e/build 자동화
+3. structured logging과 request/response logging 추가
+4. graceful shutdown 확인
+5. 이후 실제 DB 기반 e2e test 검토
 
-이 순서로 진행하면 pagination처럼 response contract를 먼저 단단하게 만들 수 있다.
+이 순서로 진행하면 API contract를 유지하면서 운영에 필요한 기본기를 점진적으로 추가할 수 있다.

@@ -5,6 +5,27 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { Prisma } from '../src/generated/prisma/client';
+import type { ErrorResponseDto } from '../src/common/errors';
+
+type ExpectedErrorResponse = Omit<ErrorResponseDto, 'timestamp' | 'details'> & {
+  details?: string[];
+};
+
+function expectErrorResponse(body: unknown, expected: ExpectedErrorResponse) {
+  const expectedBody: Record<string, unknown> = {
+    statusCode: expected.statusCode,
+    code: expected.code,
+    message: expected.message,
+    path: expected.path,
+    timestamp: expect.any(String) as unknown,
+  };
+
+  if (expected.details) {
+    expectedBody.details = expect.arrayContaining(expected.details) as unknown;
+  }
+
+  expect(body).toEqual(expectedBody);
+}
 
 describe('AppModule (e2e)', () => {
   let app: INestApplication<App>;
@@ -113,7 +134,14 @@ describe('AppModule (e2e)', () => {
         role: 'admin',
       })
       .expect(400)
-      .expect(() => {
+      .expect(({ body }) => {
+        expectErrorResponse(body, {
+          statusCode: 400,
+          code: 'VALIDATION_FAILED',
+          message: 'Validation failed',
+          path: '/api/users',
+          details: ['email must be an email', 'property role should not exist'],
+        });
         expect(prisma.user.create).not.toHaveBeenCalled();
       });
   });
@@ -126,7 +154,15 @@ describe('AppModule (e2e)', () => {
       .send({
         email: sampleUser.email,
       })
-      .expect(409);
+      .expect(409)
+      .expect(({ body }) => {
+        expectErrorResponse(body, {
+          statusCode: 409,
+          code: 'CONFLICT',
+          message: 'A user with this email already exists',
+          path: '/api/users',
+        });
+      });
   });
 
   it('/api/users (GET) returns paginated users', () => {
@@ -176,7 +212,14 @@ describe('AppModule (e2e)', () => {
         page: '0',
       })
       .expect(400)
-      .expect(() => {
+      .expect(({ body }) => {
+        expectErrorResponse(body, {
+          statusCode: 400,
+          code: 'VALIDATION_FAILED',
+          message: 'Validation failed',
+          path: '/api/users?page=0',
+          details: ['page must not be less than 1'],
+        });
         expect(prisma.user.findMany).not.toHaveBeenCalled();
       });
   });
@@ -186,7 +229,15 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .get(`/api/users/${sampleUser.id}`)
-      .expect(404);
+      .expect(404)
+      .expect(({ body }) => {
+        expectErrorResponse(body, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: `User ${sampleUser.id} was not found`,
+          path: `/api/users/${sampleUser.id}`,
+        });
+      });
   });
 
   it('/api/users/:id (PATCH) maps missing records to 404', () => {
@@ -197,7 +248,15 @@ describe('AppModule (e2e)', () => {
       .send({
         name: 'Updated Name',
       })
-      .expect(404);
+      .expect(404)
+      .expect(({ body }) => {
+        expectErrorResponse(body, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: `User ${sampleUser.id} was not found`,
+          path: `/api/users/${sampleUser.id}`,
+        });
+      });
   });
 
   afterEach(async () => {

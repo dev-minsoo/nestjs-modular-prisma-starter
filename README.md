@@ -21,6 +21,7 @@ src/
   app/
     app.module.ts
   common/
+    errors/
     pagination/
   config/
     environment.ts
@@ -42,6 +43,7 @@ src/
 주요 역할:
 
 - `app.module.ts`: root module
+- `common/errors`: reusable HTTP error response DTOs and exception filter
 - `common/pagination`: reusable pagination DTOs, types, utilities
 - `config/environment.ts`: environment profile loading and validation
 - `prisma.service.ts`: Prisma Client provider
@@ -122,6 +124,31 @@ orderDirection  asc | desc
 ```
 
 Duplicate email은 `409 Conflict`, 없는 user 조회/수정/삭제는 `404 Not Found`로 응답합니다.
+
+Error response:
+
+```json
+{
+  "statusCode": 404,
+  "code": "NOT_FOUND",
+  "message": "User was not found",
+  "path": "/api/users/2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524",
+  "timestamp": "2026-06-12T05:00:00.000Z"
+}
+```
+
+Validation error response:
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Validation failed",
+  "path": "/api/users",
+  "timestamp": "2026-06-12T05:00:00.000Z",
+  "details": ["email must be an email"]
+}
+```
 
 ## Environment Profiles
 

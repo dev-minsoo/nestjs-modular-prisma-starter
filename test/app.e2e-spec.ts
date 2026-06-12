@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../src/app/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { Prisma } from '../src/generated/prisma/client';
+import { Role } from '../src/generated/prisma/enums';
 import type { ErrorResponseDto } from '../src/common/errors';
 import { AppLogger, REQUEST_ID_HEADER } from '../src/common/logging';
 
@@ -31,12 +34,14 @@ function expectErrorResponse(body: unknown, expected: ExpectedErrorResponse) {
 
 describe('AppModule (e2e)', () => {
   let app: INestApplication<App>;
+  let jwtService: JwtService;
   let prisma: {
     $connect: jest.Mock;
     $disconnect: jest.Mock;
     $queryRaw: jest.Mock;
     $transaction: jest.Mock;
     user: {
+      count: jest.Mock;
       create: jest.Mock;
       findMany: jest.Mock;
       count: jest.Mock;
@@ -51,8 +56,18 @@ describe('AppModule (e2e)', () => {
     id: '2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524',
     email: 'minsoo@example.com',
     name: 'Minsoo Kim',
+    passwordHash: 'hashed-password',
+    role: Role.USER,
     createdAt: now,
     updatedAt: now,
+  };
+  const sampleUserResponse = {
+    id: sampleUser.id,
+    email: sampleUser.email,
+    name: sampleUser.name,
+    role: sampleUser.role,
+    createdAt: sampleUser.createdAt.toISOString(),
+    updatedAt: sampleUser.updatedAt.toISOString(),
   };
 
   const prismaError = (code: string) =>
@@ -70,6 +85,7 @@ describe('AppModule (e2e)', () => {
         Promise.all(queries),
       ),
       user: {
+        count: jest.fn(),
         create: jest.fn(),
         findMany: jest.fn(),
         count: jest.fn(),
@@ -102,6 +118,7 @@ describe('AppModule (e2e)', () => {
       }),
     );
     await app.init();
+    jwtService = app.get(JwtService);
   });
 
   it('/api/health (GET)', () => {
@@ -144,32 +161,118 @@ describe('AppModule (e2e)', () => {
       });
   });
 
-  it('/api/users (POST) creates a user', () => {
-    prisma.user.create.mockResolvedValue(sampleUser);
+  it('/api/auth/signup (POST) signs up the first user as admin', () => {
+    prisma.user.count.mockResolvedValue(0);
+    prisma.user.create.mockImplementation(
+      ({
+        data,
+      }: {
+        data: {
+          email: string;
+          name?: string;
+          passwordHash: string;
+          role: Role;
+        };
+      }) =>
+        Promise.resolve({
+          ...sampleUser,
+          email: data.email,
+          name: data.name ?? null,
+          passwordHash: data.passwordHash,
+          role: data.role,
+        }),
+    );
 
     return request(app.getHttpServer())
-      .post('/api/users')
+      .post('/api/auth/signup')
       .send({
         email: sampleUser.email,
         name: sampleUser.name,
+        password: 'strong-password',
       })
       .expect(201)
       .expect(({ body }) => {
         expect(body).toEqual({
-          ...sampleUser,
-          createdAt: sampleUser.createdAt.toISOString(),
-          updatedAt: sampleUser.updatedAt.toISOString(),
+          accessToken: expect.any(String) as unknown,
+          tokenType: 'Bearer',
+          expiresIn: 900,
+          user: {
+            ...sampleUserResponse,
+            role: Role.ADMIN,
+          },
         });
+        expect(body).not.toHaveProperty('user.passwordHash');
+        expect(prisma.user.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              passwordHash: expect.any(String) as unknown,
+              role: Role.ADMIN,
+            }) as unknown,
+          }),
+        );
+      });
+  });
+
+  it('/api/auth/login (POST) returns an access token', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...sampleUser,
+      passwordHash: await bcrypt.hash('strong-password', 10),
+    });
+
+    return request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({
+        email: sampleUser.email,
+        password: 'strong-password',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          accessToken: expect.any(String) as unknown,
+          tokenType: 'Bearer',
+          expiresIn: 900,
+          user: sampleUserResponse,
+        });
+      });
+  });
+
+  it('/api/auth/me (GET) returns the authenticated user', () => {
+    prisma.user.findUnique.mockResolvedValue(sampleUser);
+
+    return request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${createAccessToken(Role.USER)}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(sampleUserResponse);
+      });
+  });
+
+  it('/api/users (POST) creates a user for admins', () => {
+    prisma.user.create.mockResolvedValue(sampleUser);
+
+    return request(app.getHttpServer())
+      .post('/api/users')
+      .set('Authorization', `Bearer ${createAccessToken(Role.ADMIN)}`)
+      .send({
+        email: sampleUser.email,
+        name: sampleUser.name,
+        password: 'strong-password',
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(sampleUserResponse);
       });
   });
 
   it('/api/users (POST) rejects validation failures', () => {
     return request(app.getHttpServer())
       .post('/api/users')
+      .set('Authorization', `Bearer ${createAccessToken(Role.ADMIN)}`)
       .set(REQUEST_ID_HEADER, 'e2e-validation-request')
       .send({
         email: 'not-an-email',
-        role: 'admin',
+        password: 'short',
       })
       .expect(400)
       .expect(({ body }) => {
@@ -179,7 +282,10 @@ describe('AppModule (e2e)', () => {
           message: 'Validation failed',
           path: '/api/users',
           requestId: 'e2e-validation-request',
-          details: ['email must be an email', 'property role should not exist'],
+          details: [
+            'email must be an email',
+            'password must be longer than or equal to 8 characters',
+          ],
         });
         expect(prisma.user.create).not.toHaveBeenCalled();
       });
@@ -190,9 +296,11 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .post('/api/users')
+      .set('Authorization', `Bearer ${createAccessToken(Role.ADMIN)}`)
       .set(REQUEST_ID_HEADER, 'e2e-conflict-request')
       .send({
         email: sampleUser.email,
+        password: 'strong-password',
       })
       .expect(409)
       .expect(({ body }) => {
@@ -212,6 +320,7 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .get('/api/users')
+      .set('Authorization', `Bearer ${createAccessToken(Role.ADMIN)}`)
       .query({
         page: '2',
         pageSize: '1',
@@ -222,13 +331,7 @@ describe('AppModule (e2e)', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual({
-          items: [
-            {
-              ...sampleUser,
-              createdAt: sampleUser.createdAt.toISOString(),
-              updatedAt: sampleUser.updatedAt.toISOString(),
-            },
-          ],
+          items: [sampleUserResponse],
           meta: {
             page: 2,
             pageSize: 1,
@@ -249,6 +352,7 @@ describe('AppModule (e2e)', () => {
   it('/api/users (GET) rejects invalid pagination', () => {
     return request(app.getHttpServer())
       .get('/api/users')
+      .set('Authorization', `Bearer ${createAccessToken(Role.ADMIN)}`)
       .set(REQUEST_ID_HEADER, 'e2e-pagination-request')
       .query({
         page: '0',
@@ -267,11 +371,21 @@ describe('AppModule (e2e)', () => {
       });
   });
 
+  it('/api/users (GET) rejects missing and insufficient credentials', async () => {
+    await request(app.getHttpServer()).get('/api/users').expect(401);
+
+    await request(app.getHttpServer())
+      .get('/api/users')
+      .set('Authorization', `Bearer ${createAccessToken(Role.USER)}`)
+      .expect(403);
+  });
+
   it('/api/users/:id (GET) maps missing records to 404', () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     return request(app.getHttpServer())
       .get(`/api/users/${sampleUser.id}`)
+      .set('Authorization', `Bearer ${createAccessToken(Role.USER)}`)
       .set(REQUEST_ID_HEADER, 'e2e-get-missing-request')
       .expect(404)
       .expect(({ body }) => {
@@ -290,6 +404,7 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .patch(`/api/users/${sampleUser.id}`)
+      .set('Authorization', `Bearer ${createAccessToken(Role.USER)}`)
       .set(REQUEST_ID_HEADER, 'e2e-patch-missing-request')
       .send({
         name: 'Updated Name',
@@ -309,4 +424,12 @@ describe('AppModule (e2e)', () => {
   afterEach(async () => {
     await app.close();
   });
+
+  function createAccessToken(role: Role) {
+    return jwtService.sign({
+      sub: sampleUser.id,
+      email: sampleUser.email,
+      role,
+    });
+  }
 });

@@ -1,6 +1,8 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
+import { Role } from '../../generated/prisma/enums';
 import { PrismaService } from '../../database/prisma.service';
+import { PasswordService } from '../../common/security';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UsersService } from './users.service';
 
@@ -19,14 +21,27 @@ describe('UsersService', () => {
     $transaction: jest.Mock;
     user: PrismaUserMock;
   };
+  let passwordService: {
+    hash: jest.Mock;
+  };
 
   const now = new Date('2026-06-11T05:00:00.000Z');
   const sampleUser = {
     id: '2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524',
     email: 'minsoo@example.com',
     name: 'Minsoo Kim',
+    passwordHash: 'hashed-password',
+    role: Role.USER,
     createdAt: now,
     updatedAt: now,
+  };
+  const sampleUserResponse = {
+    id: sampleUser.id,
+    email: sampleUser.email,
+    name: sampleUser.name,
+    role: sampleUser.role,
+    createdAt: sampleUser.createdAt,
+    updatedAt: sampleUser.updatedAt,
   };
 
   const prismaError = (code: string) =>
@@ -49,8 +64,14 @@ describe('UsersService', () => {
         delete: jest.fn(),
       },
     };
+    passwordService = {
+      hash: jest.fn().mockResolvedValue('hashed-password'),
+    };
 
-    service = new UsersService(prisma as unknown as PrismaService);
+    service = new UsersService(
+      prisma as unknown as PrismaService,
+      passwordService as unknown as PasswordService,
+    );
   });
 
   it('creates a user', async () => {
@@ -60,13 +81,17 @@ describe('UsersService', () => {
       service.create({
         email: sampleUser.email,
         name: sampleUser.name,
+        password: 'strong-password',
       }),
-    ).resolves.toEqual(sampleUser);
+    ).resolves.toEqual(sampleUserResponse);
 
+    expect(passwordService.hash).toHaveBeenCalledWith('strong-password');
     expect(prisma.user.create).toHaveBeenCalledWith({
       data: {
         email: sampleUser.email,
         name: sampleUser.name,
+        passwordHash: 'hashed-password',
+        role: Role.USER,
       },
     });
   });
@@ -77,6 +102,7 @@ describe('UsersService', () => {
     await expect(
       service.create({
         email: sampleUser.email,
+        password: 'strong-password',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
@@ -86,7 +112,7 @@ describe('UsersService', () => {
     prisma.user.count.mockResolvedValue(1);
 
     await expect(service.findAll()).resolves.toEqual({
-      items: [sampleUser],
+      items: [sampleUserResponse],
       meta: {
         page: 1,
         pageSize: 20,
@@ -133,7 +159,7 @@ describe('UsersService', () => {
     prisma.user.count.mockResolvedValue(7);
 
     await expect(service.findAll(query)).resolves.toEqual({
-      items: [sampleUser],
+      items: [sampleUserResponse],
       meta: {
         page: 2,
         pageSize: 5,
@@ -154,7 +180,9 @@ describe('UsersService', () => {
   it('finds one user by id', async () => {
     prisma.user.findUnique.mockResolvedValue(sampleUser);
 
-    await expect(service.findOne(sampleUser.id)).resolves.toEqual(sampleUser);
+    await expect(service.findOne(sampleUser.id)).resolves.toEqual(
+      sampleUserResponse,
+    );
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: sampleUser.id },
     });
@@ -177,7 +205,7 @@ describe('UsersService', () => {
     await expect(
       service.update(sampleUser.id, { name: 'Updated Name' }),
     ).resolves.toEqual({
-      ...sampleUser,
+      ...sampleUserResponse,
       name: 'Updated Name',
     });
 
@@ -206,7 +234,9 @@ describe('UsersService', () => {
   it('removes a user', async () => {
     prisma.user.delete.mockResolvedValue(sampleUser);
 
-    await expect(service.remove(sampleUser.id)).resolves.toEqual(sampleUser);
+    await expect(service.remove(sampleUser.id)).resolves.toEqual(
+      sampleUserResponse,
+    );
     expect(prisma.user.delete).toHaveBeenCalledWith({
       where: { id: sampleUser.id },
     });

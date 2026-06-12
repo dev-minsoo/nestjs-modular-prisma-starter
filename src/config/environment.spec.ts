@@ -30,6 +30,7 @@ describe('environment configuration', () => {
         PORT: '8080',
         DATABASE_URL: 'postgresql://user:password@localhost:5432/app',
         CORS_ORIGIN: 'https://example.com, https://admin.example.com',
+        JWT_ACCESS_TOKEN_SECRET: 'prod-secret',
       }),
     ).toEqual(
       expect.objectContaining({
@@ -37,6 +38,20 @@ describe('environment configuration', () => {
         PORT: 8080,
         DATABASE_URL: 'postgresql://user:password@localhost:5432/app',
         CORS_ORIGINS: ['https://example.com', 'https://admin.example.com'],
+        JWT_ACCESS_TOKEN_SECRET: 'prod-secret',
+      }),
+    );
+  });
+
+  it('uses a test JWT secret fallback in test environment', () => {
+    expect(
+      validateEnvironment({
+        APP_ENV: 'test',
+        DATABASE_URL: 'postgresql://user:password@localhost:5432/app',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        JWT_ACCESS_TOKEN_SECRET: 'test-jwt-access-token-secret',
       }),
     );
   });
@@ -61,7 +76,17 @@ describe('environment configuration', () => {
         APP_ENV: 'local',
         PORT: '0',
         DATABASE_URL: 'postgresql://user:password@localhost:5432/app',
+        JWT_ACCESS_TOKEN_SECRET: 'local-secret',
       }),
     ).toThrow('PORT must be an integer');
+  });
+
+  it('requires JWT_ACCESS_TOKEN_SECRET outside test', () => {
+    expect(() =>
+      validateEnvironment({
+        APP_ENV: 'local',
+        DATABASE_URL: 'postgresql://user:password@localhost:5432/app',
+      }),
+    ).toThrow('JWT_ACCESS_TOKEN_SECRET is required');
   });
 });

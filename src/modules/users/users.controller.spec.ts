@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Role } from '../../generated/prisma/enums';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -18,6 +19,7 @@ describe('UsersController', () => {
     id: '2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524',
     email: 'minsoo@example.com',
     name: 'Minsoo Kim',
+    role: Role.USER,
     createdAt: now,
     updatedAt: now,
   };
@@ -48,6 +50,7 @@ describe('UsersController', () => {
     const dto = {
       email: sampleUser.email,
       name: sampleUser.name,
+      password: 'strong-password',
     };
 
     usersService.create.mockResolvedValue(sampleUser);

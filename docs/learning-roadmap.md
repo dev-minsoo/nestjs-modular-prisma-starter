@@ -105,7 +105,7 @@ NestJS의 공통 확장 지점을 하나씩 학습한다.
 - custom decorator
 - guard 기본 개념
 
-Status: initial `HttpExceptionFilter` complete.
+Status: initial `HttpExceptionFilter` complete. HTTP request/response logging complete.
 
 현재 HTTP exception 응답은 다음 형태로 표준화한다.
 
@@ -116,6 +116,7 @@ Status: initial `HttpExceptionFilter` complete.
   "message": "Validation failed",
   "path": "/api/users",
   "timestamp": "2026-06-12T05:00:00.000Z",
+  "requestId": "0f1cdd28-f032-4b46-9afb-91d45409c872",
   "details": []
 }
 ```
@@ -170,11 +171,11 @@ Status: initial `HttpExceptionFilter` complete.
 - production build/run 검증
 - health check에서 DB connectivity 확인
 - graceful shutdown
-- structured logging
-- request/response logging middleware 또는 interceptor
-- local/dev/prod별 log format 분리
-- request id 또는 correlation id 추가
-- 민감한 header/body field masking 정책 정리
+- structured logging: complete
+- request/response logging middleware 또는 interceptor: complete
+- local/dev/prod별 log format 분리: complete
+- request id 또는 correlation id 추가: complete
+- 민감한 header/body field masking 정책 정리: complete
 - GitHub Actions 기반 lint/test/build
 - migration deploy workflow
 
@@ -190,18 +191,19 @@ Spring Boot에서 Logback pattern, JSON encoder, `OncePerRequestFilter`, MDC로 
 6. authorization, cookie 같은 민감한 값 masking
 7. README에 log field 예시와 profile별 log format 설명 추가
 
+현재 구현은 `common/logging` 아래에 `LoggingModule`, `AppLogger`, `RequestIdMiddleware`, `HttpLoggingInterceptor`로 구성되어 있다. 4xx HTTP exception은 `warn`, 5xx server error는 `error`로 기록한다.
+
 이 단계는 학습용 샘플을 작은 production-like API로 발전시키는 과정이다.
 
 ## Suggested Next Step
 
 Phase 1, Phase 2, 공통 pagination, 공통 error response의 첫 구현이 들어간 뒤에는 운영 기본기를 하나씩 추가하는 것이 좋다.
 
-우선순위는 다음과 같다.
+structured logging을 먼저 진행했으므로 남은 우선순위는 다음과 같다.
 
 1. DB connectivity health check 추가
 2. GitHub Actions로 lint/test/e2e/build 자동화
-3. structured logging과 request/response logging 추가
-4. graceful shutdown 확인
-5. 이후 실제 DB 기반 e2e test 검토
+3. graceful shutdown 확인
+4. 이후 실제 DB 기반 e2e test 검토
 
 이 순서로 진행하면 API contract를 유지하면서 운영에 필요한 기본기를 점진적으로 추가할 수 있다.

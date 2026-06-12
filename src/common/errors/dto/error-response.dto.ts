@@ -18,6 +18,9 @@ export class ErrorResponseDto {
   @ApiProperty({ example: '2026-06-12T05:00:00.000Z' })
   timestamp!: string;
 
+  @ApiPropertyOptional({ example: '0f1cdd28-f032-4b46-9afb-91d45409c872' })
+  requestId?: string;
+
   @ApiPropertyOptional({
     example: ['email must be an email'],
     type: String,

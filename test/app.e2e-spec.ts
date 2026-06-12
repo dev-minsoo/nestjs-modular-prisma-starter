@@ -6,6 +6,7 @@ import { AppModule } from '../src/app/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { Prisma } from '../src/generated/prisma/client';
 import type { ErrorResponseDto } from '../src/common/errors';
+import { AppLogger, REQUEST_ID_HEADER } from '../src/common/logging';
 
 type ExpectedErrorResponse = Omit<ErrorResponseDto, 'timestamp' | 'details'> & {
   details?: string[];
@@ -18,6 +19,7 @@ function expectErrorResponse(body: unknown, expected: ExpectedErrorResponse) {
     message: expected.message,
     path: expected.path,
     timestamp: expect.any(String) as unknown,
+    requestId: expected.requestId ?? (expect.any(String) as unknown),
   };
 
   if (expected.details) {
@@ -80,6 +82,12 @@ describe('AppModule (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      .overrideProvider(AppLogger)
+      .useValue({
+        error: jest.fn(),
+        info: jest.fn(),
+        warnWithMetadata: jest.fn(),
+      })
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -97,7 +105,9 @@ describe('AppModule (e2e)', () => {
   it('/api/health (GET)', () => {
     return request(app.getHttpServer())
       .get('/api/health')
+      .set(REQUEST_ID_HEADER, 'e2e-health-request')
       .expect(200)
+      .expect(REQUEST_ID_HEADER, 'e2e-health-request')
       .expect(({ body }) => {
         expect(body).toEqual(
           expect.objectContaining({
@@ -129,6 +139,7 @@ describe('AppModule (e2e)', () => {
   it('/api/users (POST) rejects validation failures', () => {
     return request(app.getHttpServer())
       .post('/api/users')
+      .set(REQUEST_ID_HEADER, 'e2e-validation-request')
       .send({
         email: 'not-an-email',
         role: 'admin',
@@ -140,6 +151,7 @@ describe('AppModule (e2e)', () => {
           code: 'VALIDATION_FAILED',
           message: 'Validation failed',
           path: '/api/users',
+          requestId: 'e2e-validation-request',
           details: ['email must be an email', 'property role should not exist'],
         });
         expect(prisma.user.create).not.toHaveBeenCalled();
@@ -151,6 +163,7 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .post('/api/users')
+      .set(REQUEST_ID_HEADER, 'e2e-conflict-request')
       .send({
         email: sampleUser.email,
       })
@@ -161,6 +174,7 @@ describe('AppModule (e2e)', () => {
           code: 'CONFLICT',
           message: 'A user with this email already exists',
           path: '/api/users',
+          requestId: 'e2e-conflict-request',
         });
       });
   });
@@ -208,6 +222,7 @@ describe('AppModule (e2e)', () => {
   it('/api/users (GET) rejects invalid pagination', () => {
     return request(app.getHttpServer())
       .get('/api/users')
+      .set(REQUEST_ID_HEADER, 'e2e-pagination-request')
       .query({
         page: '0',
       })
@@ -218,6 +233,7 @@ describe('AppModule (e2e)', () => {
           code: 'VALIDATION_FAILED',
           message: 'Validation failed',
           path: '/api/users?page=0',
+          requestId: 'e2e-pagination-request',
           details: ['page must not be less than 1'],
         });
         expect(prisma.user.findMany).not.toHaveBeenCalled();
@@ -229,6 +245,7 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .get(`/api/users/${sampleUser.id}`)
+      .set(REQUEST_ID_HEADER, 'e2e-get-missing-request')
       .expect(404)
       .expect(({ body }) => {
         expectErrorResponse(body, {
@@ -236,6 +253,7 @@ describe('AppModule (e2e)', () => {
           code: 'NOT_FOUND',
           message: `User ${sampleUser.id} was not found`,
           path: `/api/users/${sampleUser.id}`,
+          requestId: 'e2e-get-missing-request',
         });
       });
   });
@@ -245,6 +263,7 @@ describe('AppModule (e2e)', () => {
 
     return request(app.getHttpServer())
       .patch(`/api/users/${sampleUser.id}`)
+      .set(REQUEST_ID_HEADER, 'e2e-patch-missing-request')
       .send({
         name: 'Updated Name',
       })
@@ -255,6 +274,7 @@ describe('AppModule (e2e)', () => {
           code: 'NOT_FOUND',
           message: `User ${sampleUser.id} was not found`,
           path: `/api/users/${sampleUser.id}`,
+          requestId: 'e2e-patch-missing-request',
         });
       });
   });

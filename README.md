@@ -22,6 +22,7 @@ src/
     app.module.ts
   common/
     errors/
+    logging/
     pagination/
   config/
     environment.ts
@@ -44,6 +45,7 @@ src/
 
 - `app.module.ts`: root module
 - `common/errors`: reusable HTTP error response DTOs and exception filter
+- `common/logging`: request id middleware, structured logger, HTTP logging interceptor
 - `common/pagination`: reusable pagination DTOs, types, utilities
 - `config/environment.ts`: environment profile loading and validation
 - `prisma.service.ts`: Prisma Client provider
@@ -133,7 +135,8 @@ Error response:
   "code": "NOT_FOUND",
   "message": "User was not found",
   "path": "/api/users/2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524",
-  "timestamp": "2026-06-12T05:00:00.000Z"
+  "timestamp": "2026-06-12T05:00:00.000Z",
+  "requestId": "0f1cdd28-f032-4b46-9afb-91d45409c872"
 }
 ```
 
@@ -146,6 +149,7 @@ Validation error response:
   "message": "Validation failed",
   "path": "/api/users",
   "timestamp": "2026-06-12T05:00:00.000Z",
+  "requestId": "0f1cdd28-f032-4b46-9afb-91d45409c872",
   "details": ["email must be an email"]
 }
 ```
@@ -178,6 +182,40 @@ Example:
 npm run start:profile:dev
 npm run start:prod
 ```
+
+## Logging
+
+모든 HTTP request에는 `x-request-id`가 붙습니다. 클라이언트가 `x-request-id` header를 보내면 그대로 사용하고, 없으면 서버가 UUID를 생성해 response header와 error response의 `requestId`에 포함합니다.
+
+기록하는 기본 필드는 다음과 같습니다.
+
+```text
+requestId, method, path, statusCode, durationMs
+```
+
+`APP_ENV=local`에서는 사람이 읽기 쉬운 pretty log를 사용합니다.
+
+```text
+2026-06-12T05:00:00.000Z INFO [HttpLoggingInterceptor] HTTP request completed requestId=0f1cdd28-f032-4b46-9afb-91d45409c872 method=GET path=/api/health statusCode=200 durationMs=4
+```
+
+`APP_ENV=dev`, `APP_ENV=prod`, `APP_ENV=test`에서는 JSON log를 사용합니다.
+
+```json
+{
+  "requestId": "0f1cdd28-f032-4b46-9afb-91d45409c872",
+  "method": "GET",
+  "path": "/api/health",
+  "statusCode": 200,
+  "durationMs": 4,
+  "timestamp": "2026-06-12T05:00:00.000Z",
+  "level": "info",
+  "message": "HTTP request completed",
+  "context": "HttpLoggingInterceptor"
+}
+```
+
+4xx HTTP exception은 `warn`, 5xx와 알 수 없는 server error는 `error`로 기록합니다. `authorization`, `cookie`, `password`, `token`, `apiKey`, `secret` 계열 field는 logging metadata에 들어가더라도 `[masked]`로 치환합니다.
 
 ## Scripts
 

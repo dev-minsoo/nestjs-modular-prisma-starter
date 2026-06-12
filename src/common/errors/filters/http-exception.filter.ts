@@ -5,7 +5,9 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
+import { getRequestId } from '../../logging';
+import type { RequestWithRequestId } from '../../logging';
 import type { ErrorResponseDto } from '../dto/error-response.dto';
 import type { ErrorCode } from '../types/error-code.type';
 
@@ -21,7 +23,7 @@ export class HttpExceptionFilter implements ExceptionFilter<HttpException> {
   catch(exception: HttpException, host: ArgumentsHost) {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
-    const request = context.getRequest<Request>();
+    const request = context.getRequest<RequestWithRequestId>();
     const statusCode = exception.getStatus();
 
     response.status(statusCode).json(
@@ -29,6 +31,7 @@ export class HttpExceptionFilter implements ExceptionFilter<HttpException> {
         exception,
         statusCode,
         path: request.originalUrl || request.url,
+        requestId: getRequestId(request),
       }),
     );
   }
@@ -37,10 +40,12 @@ export class HttpExceptionFilter implements ExceptionFilter<HttpException> {
     exception,
     statusCode,
     path,
+    requestId,
   }: {
     exception: HttpException;
     statusCode: HttpStatus;
     path: string;
+    requestId?: string;
   }): ErrorResponseDto {
     const exceptionResponse = exception.getResponse();
     const responseBody = this.parseExceptionResponse(exceptionResponse);
@@ -52,6 +57,7 @@ export class HttpExceptionFilter implements ExceptionFilter<HttpException> {
       message: this.resolveMessage(exception, responseBody, details),
       path,
       timestamp: new Date().toISOString(),
+      ...(requestId ? { requestId } : {}),
       ...(details ? { details } : {}),
     };
   }

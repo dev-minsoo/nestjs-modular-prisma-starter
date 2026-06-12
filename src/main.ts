@@ -3,9 +3,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app/app.module';
+import { AppLogger } from './common/logging';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useLogger(app.get(AppLogger));
+
   const configService = app.get(ConfigService);
   const port = configService.getOrThrow<number>('PORT');
   const corsOrigins = configService.get<string[]>('CORS_ORIGINS', []);

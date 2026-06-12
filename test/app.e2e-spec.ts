@@ -15,6 +15,24 @@ type ExpectedErrorResponse = Omit<ErrorResponseDto, 'timestamp' | 'details'> & {
   details?: string[];
 };
 
+type PrismaServiceMock = {
+  $connect: jest.Mock;
+  $disconnect: jest.Mock;
+  $queryRaw: jest.Mock;
+  $transaction: jest.Mock;
+  runInTransaction: jest.Mock;
+  user: {
+    create: jest.Mock;
+    findMany: jest.Mock;
+    count: jest.Mock;
+    findUnique: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+  };
+};
+
+type TransactionCallback = (tx: PrismaServiceMock) => Promise<unknown>;
+
 function expectErrorResponse(body: unknown, expected: ExpectedErrorResponse) {
   const expectedBody: Record<string, unknown> = {
     statusCode: expected.statusCode,
@@ -35,21 +53,7 @@ function expectErrorResponse(body: unknown, expected: ExpectedErrorResponse) {
 describe('AppModule (e2e)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
-  let prisma: {
-    $connect: jest.Mock;
-    $disconnect: jest.Mock;
-    $queryRaw: jest.Mock;
-    $transaction: jest.Mock;
-    user: {
-      count: jest.Mock;
-      create: jest.Mock;
-      findMany: jest.Mock;
-      count: jest.Mock;
-      findUnique: jest.Mock;
-      update: jest.Mock;
-      delete: jest.Mock;
-    };
-  };
+  let prisma: PrismaServiceMock;
 
   const now = new Date('2026-06-11T05:00:00.000Z');
   const sampleUser = {
@@ -84,8 +88,10 @@ describe('AppModule (e2e)', () => {
       $transaction: jest.fn((queries: Promise<unknown>[]) =>
         Promise.all(queries),
       ),
+      runInTransaction: jest.fn((callback: TransactionCallback) =>
+        callback(prisma),
+      ),
       user: {
-        count: jest.fn(),
         create: jest.fn(),
         findMany: jest.fn(),
         count: jest.fn(),
@@ -202,6 +208,13 @@ describe('AppModule (e2e)', () => {
           },
         });
         expect(body).not.toHaveProperty('user.passwordHash');
+        expect(prisma.runInTransaction).toHaveBeenCalledWith(
+          expect.any(Function),
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxRetries: 2,
+          },
+        );
         expect(prisma.user.create).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({

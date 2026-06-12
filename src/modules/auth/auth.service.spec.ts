@@ -6,12 +6,19 @@ import { Prisma } from '../../generated/prisma/client';
 import { Role } from '../../generated/prisma/enums';
 import { AuthService } from './auth.service';
 
+type TransactionClientMock = {
+  user: {
+    count: jest.Mock;
+    create: jest.Mock;
+  };
+};
+
 describe('AuthService', () => {
   let service: AuthService;
+  let transactionClient: TransactionClientMock;
   let prisma: {
+    runInTransaction: jest.Mock;
     user: {
-      count: jest.Mock;
-      create: jest.Mock;
       findUnique: jest.Mock;
     };
   };
@@ -40,10 +47,17 @@ describe('AuthService', () => {
   };
 
   beforeEach(() => {
-    prisma = {
+    transactionClient = {
       user: {
         count: jest.fn(),
         create: jest.fn(),
+      },
+    };
+    prisma = {
+      runInTransaction: jest.fn((callback: TransactionCallback) =>
+        callback(transactionClient),
+      ),
+      user: {
         findUnique: jest.fn(),
       },
     };
@@ -68,8 +82,8 @@ describe('AuthService', () => {
       role: Role.ADMIN,
     };
 
-    prisma.user.count.mockResolvedValue(0);
-    prisma.user.create.mockResolvedValue(adminUser);
+    transactionClient.user.count.mockResolvedValue(0);
+    transactionClient.user.create.mockResolvedValue(adminUser);
 
     await expect(
       service.signup({
@@ -87,7 +101,11 @@ describe('AuthService', () => {
       },
     });
 
-    expect(prisma.user.create).toHaveBeenCalledWith({
+    expect(prisma.runInTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxRetries: 2,
+    });
+    expect(transactionClient.user.create).toHaveBeenCalledWith({
       data: {
         email: sampleUser.email,
         name: sampleUser.name,
@@ -95,7 +113,7 @@ describe('AuthService', () => {
         role: Role.ADMIN,
       },
     });
-    expect(prisma.user.count).toHaveBeenCalledWith({
+    expect(transactionClient.user.count).toHaveBeenCalledWith({
       where: {
         role: Role.ADMIN,
       },
@@ -103,8 +121,8 @@ describe('AuthService', () => {
   });
 
   it('signs up as USER when an admin already exists', async () => {
-    prisma.user.count.mockResolvedValue(1);
-    prisma.user.create.mockResolvedValue(sampleUser);
+    transactionClient.user.count.mockResolvedValue(1);
+    transactionClient.user.create.mockResolvedValue(sampleUser);
 
     await service.signup({
       email: sampleUser.email,
@@ -112,7 +130,7 @@ describe('AuthService', () => {
       password: 'strong-password',
     });
 
-    expect(prisma.user.create).toHaveBeenCalledWith(
+    expect(transactionClient.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           role: Role.USER,
@@ -122,8 +140,8 @@ describe('AuthService', () => {
   });
 
   it('maps duplicate signup emails to ConflictException', async () => {
-    prisma.user.count.mockResolvedValue(1);
-    prisma.user.create.mockRejectedValue(
+    transactionClient.user.count.mockResolvedValue(1);
+    transactionClient.user.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Duplicate email', {
         code: 'P2002',
         clientVersion: 'test',
@@ -193,3 +211,5 @@ describe('AuthService', () => {
     ).resolves.toEqual(sampleUserResponse);
   });
 });
+
+type TransactionCallback = (tx: TransactionClientMock) => Promise<unknown>;

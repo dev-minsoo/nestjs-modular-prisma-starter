@@ -146,7 +146,17 @@ Status: initial `HttpExceptionFilter` complete. HTTP request/response logging co
 - JWT access token
 - `JwtAuthGuard`
 - `@CurrentUser()` custom decorator
+- `@Roles()` custom decorator와 `RolesGuard`
 - 인증이 필요한 users/profile API
+
+Status: initial JWT auth and role guard complete.
+
+현재 구현은 다음 흐름을 포함한다.
+
+- `POST /api/auth/signup`: `ADMIN`이 아직 없으면 `ADMIN`, 이미 있으면 `USER`
+- `POST /api/auth/login`: email/password 검증 후 JWT access token 발급
+- `GET /api/auth/me`: `JwtAuthGuard`로 보호된 현재 사용자 API
+- `@Roles('ADMIN')`: users list/create/delete 관리 API 보호
 
 인증은 여러 개념이 한꺼번에 섞이므로 초반부터 넣기보다 CRUD, validation, error handling, test가 어느 정도 정리된 뒤 추가한다.
 

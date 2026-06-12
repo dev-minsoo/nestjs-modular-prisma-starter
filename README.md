@@ -24,12 +24,14 @@ src/
     errors/
     logging/
     pagination/
+    security/
   config/
     environment.ts
   database/
     database.module.ts
     prisma.service.ts
   modules/
+    auth/
     health/
     users/
       dto/
@@ -47,7 +49,9 @@ src/
 - `common/errors`: reusable HTTP error response DTOs and exception filter
 - `common/logging`: request id middleware, structured logger, HTTP logging interceptor
 - `common/pagination`: reusable pagination DTOs, types, utilities
+- `common/security`: password hashing helper
 - `config/environment.ts`: environment profile loading and validation
+- `auth`: signup/login, JWT strategy, auth/role guards
 - `prisma.service.ts`: Prisma Client provider
 - `users.controller.ts`: users HTTP endpoints
 - `users.service.ts`: users business logic and database access coordination
@@ -90,22 +94,74 @@ Health response 예시:
 
 `/api/health`는 가벼운 Prisma query로 database 연결을 확인합니다. Database 확인에 실패하면 `503 Service Unavailable`과 함께 `checks.database: "error"`를 반환합니다.
 
+Auth API:
+
+```text
+POST /api/auth/signup
+POST /api/auth/login
+GET  /api/auth/me
+```
+
+아직 `ADMIN` 사용자가 없으면 가입한 사용자는 `ADMIN`, 이미 `ADMIN`이 있으면 `USER` role을 받습니다.
+
+Signup:
+
+```bash
+curl -X POST http://localhost:3000/api/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"minsoo@example.com","name":"Minsoo Kim","password":"strong-password"}'
+```
+
+Login:
+
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"minsoo@example.com","password":"strong-password"}'
+```
+
+Auth response:
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "user": {
+    "id": "2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524",
+    "email": "minsoo@example.com",
+    "name": "Minsoo Kim",
+    "role": "ADMIN",
+    "createdAt": "2026-06-11T05:00:00.000Z",
+    "updatedAt": "2026-06-11T05:00:00.000Z"
+  }
+}
+```
+
+Current user:
+
+```bash
+curl http://localhost:3000/api/auth/me \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
 Users API:
 
 ```text
-POST   /api/users
-GET    /api/users?page=1&pageSize=20&search=minsoo&orderBy=createdAt&orderDirection=desc
-GET    /api/users/:id
-PATCH  /api/users/:id
-DELETE /api/users/:id
+POST   /api/users   # ADMIN
+GET    /api/users?page=1&pageSize=20&search=minsoo&orderBy=createdAt&orderDirection=desc  # ADMIN
+GET    /api/users/:id     # authenticated
+PATCH  /api/users/:id     # authenticated
+DELETE /api/users/:id     # ADMIN
 ```
 
-Example request:
+Admin user create request:
 
 ```bash
 curl -X POST http://localhost:3000/api/users \
   -H 'Content-Type: application/json' \
-  -d '{"email":"minsoo@example.com","name":"Minsoo Kim"}'
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -d '{"email":"user@example.com","name":"User Kim","password":"strong-password","role":"USER"}'
 ```
 
 List response:
@@ -117,6 +173,7 @@ List response:
       "id": "2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524",
       "email": "minsoo@example.com",
       "name": "Minsoo Kim",
+      "role": "USER",
       "createdAt": "2026-06-11T05:00:00.000Z",
       "updatedAt": "2026-06-11T05:00:00.000Z"
     }
@@ -140,7 +197,7 @@ orderBy         createdAt | updatedAt | email | name
 orderDirection  asc | desc
 ```
 
-Duplicate email은 `409 Conflict`, 없는 user 조회/수정/삭제는 `404 Not Found`로 응답합니다.
+Duplicate email은 `409 Conflict`, 없는 user 조회/수정/삭제는 `404 Not Found`로 응답합니다. 인증되지 않은 요청은 `401 Unauthorized`, role이 부족한 요청은 `403 Forbidden`으로 응답합니다.
 
 Error response:
 
@@ -189,7 +246,7 @@ prod:  .env.prod.local -> .env.prod -> .env
 test:  .env.test.local -> .env.test -> .env
 ```
 
-`APP_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`을 사용할 수 있습니다. `DATABASE_URL`은 필수이며 누락되거나 PostgreSQL URL이 아니면 앱이 부팅에 실패합니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
+`APP_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`, `JWT_ACCESS_TOKEN_SECRET`을 사용할 수 있습니다. `DATABASE_URL`은 필수이며 누락되거나 PostgreSQL URL이 아니면 앱이 부팅에 실패합니다. `JWT_ACCESS_TOKEN_SECRET`은 `test`를 제외한 profile에서 필수입니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
 
 Example:
 

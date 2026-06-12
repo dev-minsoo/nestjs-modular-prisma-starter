@@ -10,6 +10,8 @@
 Controller -> Service -> Prisma -> PostgreSQL
 ```
 
+상세 request lifecycle과 Mermaid diagram은 `docs/nestjs-request-lifecycle.md`에 따로 정리한다.
+
 Spring Boot와 비교하면 대략 다음처럼 볼 수 있다.
 
 | NestJS | Spring Boot | 역할 |
@@ -208,6 +210,59 @@ Validation 실패는 `details` 배열을 추가한다.
 | `ResponseEntity<ErrorResponse>` | `response.status(...).json(...)` |
 | bean으로 등록 | `APP_FILTER` provider 또는 `app.useGlobalFilters()` |
 | validation error는 `MethodArgumentNotValidException` 등으로 처리 | validation error는 `ValidationPipe`가 `BadRequestException`을 만들고 filter가 변환 |
+
+## Authentication And Authorization
+
+Spring Security에서 filter chain을 통해 JWT를 읽고 `SecurityContext`를 채우는 흐름은 NestJS에서 guard와 Passport strategy 조합으로 표현한다.
+
+이 샘플의 인증 흐름은 다음과 같다.
+
+```text
+POST /api/auth/login
+-> AuthService가 email/password 확인
+-> JwtService가 access token 발급
+-> JwtStrategy가 bearer token 검증
+-> JwtAuthGuard가 request.user 구성
+-> RolesGuard가 role metadata 확인
+```
+
+Signup, login, protected API sequence diagram은 `docs/nestjs-request-lifecycle.md`에 정리한다.
+
+Spring Security와 비교하면 다음처럼 대응된다.
+
+| Spring Security | NestJS sample | 역할 |
+| --- | --- | --- |
+| `SecurityFilterChain` | `JwtAuthGuard`, `RolesGuard` | 요청별 인증/인가 흐름 적용 |
+| `OncePerRequestFilter` | Passport `JwtStrategy` + guard | bearer token 추출과 검증 |
+| `AuthenticationManager` | `AuthService.login()` | credential 검증 진입점 |
+| `UserDetailsService` | Prisma `user.findUnique()` | email 기준 사용자 조회 |
+| `PasswordEncoder` | `PasswordService` with bcryptjs | password hash/compare |
+| `SecurityContextHolder` | `request.user` | 인증된 사용자 context |
+| `@AuthenticationPrincipal` | `@CurrentUser()` | controller method에서 현재 사용자 주입 |
+| `@PreAuthorize("hasRole('ADMIN')")` | `@Roles(Role.ADMIN)` + `RolesGuard` | role 기반 method authorization |
+
+Spring Boot에서는 보통 다음처럼 method security를 건다.
+
+```java
+@PreAuthorize("hasRole('ADMIN')")
+@GetMapping("/users")
+List<UserResponse> findAll() {
+  return userService.findAll();
+}
+```
+
+이 샘플에서는 metadata decorator와 guard를 조합한다.
+
+```ts
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
+@Get()
+findAll(@Query() query: ListUsersQueryDto) {
+  return this.usersService.findAll(query);
+}
+```
+
+NestJS guard는 controller 진입 전에 실행되므로 Spring Security filter나 method security처럼 요청을 조기에 거절할 수 있다. 인증 실패는 `401 Unauthorized`, role 부족은 `403 Forbidden`으로 응답한다.
 
 ## Testing
 

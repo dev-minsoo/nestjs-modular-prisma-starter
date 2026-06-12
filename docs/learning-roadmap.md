@@ -34,6 +34,7 @@ Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에 별도로
 - PostgreSQL + Prisma ORM
 - `User` CRUD API
 - users list pagination, search, ordering
+- common pagination DTO/type/helper
 - DTO validation
 - Prisma known error mapping
 - Swagger/OpenAPI 문서
@@ -60,6 +61,7 @@ Status: initial implementation complete.
 - missing record는 `404 Not Found`로 처리
 - validation 실패 케이스 테스트
 - users list에 pagination, search, ordering 추가
+- users pagination을 `src/common/pagination`으로 분리
 
 현재 users list 응답은 단순 배열이 아니라 다음 형태를 사용한다.
 
@@ -160,14 +162,14 @@ NestJS의 공통 확장 지점을 하나씩 학습한다.
 
 ## Suggested Next Step
 
-Phase 1과 Phase 2의 첫 구현이 들어간 뒤에는 실제 DB를 사용하는 e2e test로 확장하는 것이 좋다.
+Phase 1과 Phase 2의 첫 구현이 들어간 뒤에는 공통 에러 응답 포맷을 정리하는 것이 좋다.
 
 우선순위는 다음과 같다.
 
-1. test 전용 database 구성
-2. e2e test 실행 전 migration 적용
-3. HTTP request로 실제 CRUD 검증
-4. validation, conflict, not found 케이스를 실제 DB 기반으로 검증
-5. test 종료 후 데이터 정리
+1. `HttpExceptionFilter` 추가
+2. validation, conflict, not found 응답 shape 통일
+3. Swagger error response DTO 추가
+4. users API e2e test 기대값을 공통 에러 응답 기준으로 수정
+5. 이후 DB health check 또는 CI 추가
 
-이 순서로 진행하면 mock 기반 HTTP 테스트에서 실제 실행 흐름에 가까운 테스트로 자연스럽게 넘어갈 수 있다.
+이 순서로 진행하면 pagination처럼 response contract를 먼저 단단하게 만들 수 있다.

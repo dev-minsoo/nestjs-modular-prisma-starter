@@ -20,6 +20,8 @@ NestJS 입문용 서버 애플리케이션 샘플입니다. 공식 Nest CLI 프�
 src/
   app/
     app.module.ts
+  common/
+    pagination/
   config/
     environment.ts
   database/
@@ -40,6 +42,7 @@ src/
 주요 역할:
 
 - `app.module.ts`: root module
+- `common/pagination`: reusable pagination DTOs, types, utilities
 - `config/environment.ts`: environment profile loading and validation
 - `prisma.service.ts`: Prisma Client provider
 - `users.controller.ts`: users HTTP endpoints

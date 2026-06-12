@@ -54,6 +54,53 @@ Observable<User> ~= Flux<User>
 
 일반적인 NestJS + Prisma CRUD에서는 `Observable`보다 `Promise`와 `async/await`를 주로 사용한다.
 
+## Pagination
+
+Spring Data JPA에는 `Pageable`, `Page<T>`, `Slice<T>` 같은 pagination abstraction이 기본으로 제공된다.
+
+```java
+Page<User> users = userRepository.findAll(pageable);
+```
+
+이 경우 page number, page size, sort, total count, total pages 같은 개념이 Spring Data 쪽에 이미 잡혀 있다.
+
+NestJS 자체에는 이와 같은 표준 pagination 객체가 없다. NestJS는 HTTP framework이고, pagination은 사용하는 ORM/query layer나 프로젝트 convention으로 정하는 경우가 많다.
+
+Prisma도 Spring Data JPA의 `Page<T>` 같은 결과 객체를 직접 반환하지 않는다. 대신 query option으로 `skip`, `take`, `orderBy`를 넘긴다.
+
+```ts
+const [items, total] = await prisma.$transaction([
+  prisma.user.findMany({
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    orderBy: { createdAt: 'desc' },
+  }),
+  prisma.user.count(),
+]);
+```
+
+그래서 이 샘플은 공통 pagination helper를 직접 둔다.
+
+```text
+src/common/pagination/dto/pagination-query.dto.ts
+src/common/pagination/dto/pagination-meta.dto.ts
+src/common/pagination/types/paginated-result.type.ts
+src/common/pagination/utils/pagination.util.ts
+```
+
+Spring Data JPA와 비교하면 다음처럼 대응된다.
+
+| Spring Data JPA | NestJS + Prisma sample |
+| --- | --- |
+| `Pageable` | `PaginationQueryDto` |
+| `Page<T>.getContent()` | `PaginatedResult<T>.items` |
+| `Page<T>.getTotalElements()` | `meta.total` |
+| `Page<T>.getTotalPages()` | `meta.totalPages` |
+| `Sort` | resource-specific `orderBy`, `orderDirection` DTO fields |
+| repository가 page 결과 조립 | service가 Prisma `findMany` + `count` 결과를 조립 |
+
+즉 Spring Data JPA는 pagination abstraction이 framework/data layer에 더 강하게 들어가 있고, NestJS + Prisma에서는 API 계약에 맞는 pagination shape을 애플리케이션에서 명시적으로 만드는 편이다.
+
 ## Environment Profiles
 
 이 프로젝트는 `APP_ENV`로 실행 환경을 나눈다.

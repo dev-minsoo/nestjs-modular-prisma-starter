@@ -3,6 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  createPaginatedResult,
+  getPaginationParams,
+} from '../../common/pagination';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -28,30 +32,20 @@ export class UsersService {
   }
 
   async findAll(query: ListUsersQueryDto = new ListUsersQueryDto()) {
-    const page = query.page;
-    const pageSize = query.pageSize;
     const where = this.buildWhere(query.search);
     const orderBy = this.buildOrderBy(query.orderBy, query.orderDirection);
+    const pagination = getPaginationParams(query);
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        ...pagination,
       }),
       this.prisma.user.count({ where }),
     ]);
 
-    return {
-      items,
-      meta: {
-        page,
-        pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
-      },
-    };
+    return createPaginatedResult(items, total, query);
   }
 
   async findOne(id: string) {

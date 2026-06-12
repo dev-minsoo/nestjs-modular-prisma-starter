@@ -75,6 +75,21 @@ Health check:
 GET http://localhost:3000/api/health
 ```
 
+Health response 예시:
+
+```json
+{
+  "status": "ok",
+  "uptime": 12.34,
+  "timestamp": "2026-06-12T05:00:00.000Z",
+  "checks": {
+    "database": "ok"
+  }
+}
+```
+
+`/api/health`는 가벼운 Prisma query로 database 연결을 확인합니다. Database 확인에 실패하면 `503 Service Unavailable`과 함께 `checks.database: "error"`를 반환합니다.
+
 Users API:
 
 ```text
@@ -216,6 +231,10 @@ requestId, method, path, statusCode, durationMs
 ```
 
 4xx HTTP exception은 `warn`, 5xx와 알 수 없는 server error는 `error`로 기록합니다. `authorization`, `cookie`, `password`, `token`, `apiKey`, `secret` 계열 field는 logging metadata에 들어가더라도 `[masked]`로 치환합니다.
+
+## Shutdown
+
+NestJS shutdown hook을 활성화했습니다. 프로세스가 `SIGTERM` 또는 `SIGINT`를 받으면 Nest가 module destroy hook을 호출하고, `PrismaService`가 PostgreSQL 연결을 해제합니다.
 
 ## Scripts
 

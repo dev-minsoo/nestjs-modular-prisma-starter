@@ -8,6 +8,7 @@ import { AppLogger } from './common/logging';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useLogger(app.get(AppLogger));
+  app.enableShutdownHooks();
 
   const configService = app.get(ConfigService);
   const port = configService.getOrThrow<number>('PORT');

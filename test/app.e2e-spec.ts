@@ -34,6 +34,7 @@ describe('AppModule (e2e)', () => {
   let prisma: {
     $connect: jest.Mock;
     $disconnect: jest.Mock;
+    $queryRaw: jest.Mock;
     $transaction: jest.Mock;
     user: {
       create: jest.Mock;
@@ -64,6 +65,7 @@ describe('AppModule (e2e)', () => {
     prisma = {
       $connect: jest.fn(),
       $disconnect: jest.fn(),
+      $queryRaw: jest.fn(),
       $transaction: jest.fn((queries: Promise<unknown>[]) =>
         Promise.all(queries),
       ),
@@ -103,6 +105,8 @@ describe('AppModule (e2e)', () => {
   });
 
   it('/api/health (GET)', () => {
+    prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }]);
+
     return request(app.getHttpServer())
       .get('/api/health')
       .set(REQUEST_ID_HEADER, 'e2e-health-request')
@@ -112,6 +116,29 @@ describe('AppModule (e2e)', () => {
         expect(body).toEqual(
           expect.objectContaining({
             status: 'ok',
+            checks: {
+              database: 'ok',
+            },
+          }),
+        );
+      });
+  });
+
+  it('/api/health (GET) returns 503 when database check fails', () => {
+    prisma.$queryRaw.mockRejectedValue(new Error('database unavailable'));
+
+    return request(app.getHttpServer())
+      .get('/api/health')
+      .set(REQUEST_ID_HEADER, 'e2e-health-failure-request')
+      .expect(503)
+      .expect(REQUEST_ID_HEADER, 'e2e-health-failure-request')
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            status: 'error',
+            checks: {
+              database: 'error',
+            },
           }),
         );
       });

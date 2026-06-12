@@ -169,8 +169,8 @@ Status: initial `HttpExceptionFilter` complete. HTTP request/response logging co
 
 - Dockerfile
 - production build/run 검증
-- health check에서 DB connectivity 확인
-- graceful shutdown
+- health check에서 DB connectivity 확인: complete
+- graceful shutdown: complete
 - structured logging: complete
 - request/response logging middleware 또는 interceptor: complete
 - local/dev/prod별 log format 분리: complete
@@ -199,11 +199,10 @@ Spring Boot에서 Logback pattern, JSON encoder, `OncePerRequestFilter`, MDC로 
 
 Phase 1, Phase 2, 공통 pagination, 공통 error response의 첫 구현이 들어간 뒤에는 운영 기본기를 하나씩 추가하는 것이 좋다.
 
-structured logging을 먼저 진행했으므로 남은 우선순위는 다음과 같다.
+structured logging, DB connectivity health check, graceful shutdown을 먼저 진행했으므로 남은 우선순위는 다음과 같다.
 
-1. DB connectivity health check 추가
-2. GitHub Actions로 lint/test/e2e/build 자동화
-3. graceful shutdown 확인
-4. 이후 실제 DB 기반 e2e test 검토
+1. GitHub Actions로 lint/test/e2e/build 자동화
+2. Dockerfile과 production build/run 검증
+3. 이후 실제 DB 기반 e2e test 검토
 
 이 순서로 진행하면 API contract를 유지하면서 운영에 필요한 기본기를 점진적으로 추가할 수 있다.

@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordService } from '../../common/security';
-import { PrismaService } from '../../database/prisma.service';
+import {
+  PrismaService,
+  PrismaTransactionClient,
+} from '../../database/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { Role } from '../../generated/prisma/enums';
 import {
@@ -32,18 +35,27 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<AuthResponseDto> {
-    const role = await this.resolveSignupRole();
     const passwordHash = await this.passwordService.hash(dto.password);
 
     try {
-      const user = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          name: dto.name,
-          passwordHash,
-          role,
+      const user = await this.prisma.runInTransaction(
+        async (tx) => {
+          const role = await this.resolveSignupRole(tx);
+
+          return tx.user.create({
+            data: {
+              email: dto.email,
+              name: dto.name,
+              passwordHash,
+              role,
+            },
+          });
         },
-      });
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxRetries: 2,
+        },
+      );
 
       return this.createAuthResponse(user);
     } catch (error) {
@@ -105,8 +117,8 @@ export class AuthService {
     };
   }
 
-  private async resolveSignupRole(): Promise<Role> {
-    const adminCount = await this.prisma.user.count({
+  private async resolveSignupRole(tx: PrismaTransactionClient): Promise<Role> {
+    const adminCount = await tx.user.count({
       where: {
         role: Role.ADMIN,
       },

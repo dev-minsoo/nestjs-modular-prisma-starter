@@ -286,6 +286,22 @@ findAll(@Query() query: ListUsersQueryDto) {
 
 NestJS guard는 controller 진입 전에 실행되므로 Spring Security filter나 method security처럼 요청을 조기에 거절할 수 있다. 인증 실패는 `401 Unauthorized`, role 부족은 `403 Forbidden`으로 응답한다.
 
+## Request Context
+
+Spring Boot에서는 요청 단위 공통 정보를 `HttpServletRequest`, `ThreadLocal`, MDC, `SecurityContextHolder`로 다루는 경우가 많다.
+
+NestJS + Node에서는 thread가 아니라 async execution chain을 따라 요청 처리가 이어지므로 이 샘플은 `AsyncLocalStorage` 기반 `RequestContextService`를 사용한다.
+
+```text
+RequestIdMiddleware
+-> RequestContextMiddleware
+-> JwtAuthGuard
+-> HttpLoggingInterceptor
+-> AppLogger
+```
+
+`AppLogger`는 context에 저장된 `requestId`, `currentUserId`, `currentUserRole`을 log metadata에 자동으로 포함한다. 자세한 설명은 `docs/nestjs-request-context.md`에 정리한다.
+
 ## Testing
 
 `*.spec.ts` 파일은 Jest 테스트 파일이다.

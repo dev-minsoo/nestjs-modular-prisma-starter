@@ -9,20 +9,21 @@
 ```mermaid
 flowchart TD
   A["HTTP Request"] --> B["RequestIdMiddleware<br/>x-request-id 생성/전파"]
-  B --> C["Guard 단계<br/>JwtAuthGuard / RolesGuard"]
-  C -->|통과| D["HttpLoggingInterceptor<br/>request started 로그"]
-  D --> E["ValidationPipe<br/>DTO validation"]
-  E --> F["Controller"]
-  F --> G["Service"]
-  G --> H["PrismaService"]
-  H --> I["PostgreSQL"]
-  I --> J["Service 결과 반환"]
-  J --> K["HttpLoggingInterceptor<br/>completed 로그"]
-  K --> L["HTTP Response"]
+  B --> C["RequestContextMiddleware<br/>AsyncLocalStorage context 시작"]
+  C --> D["Guard 단계<br/>JwtAuthGuard / RolesGuard"]
+  D -->|통과| E["HttpLoggingInterceptor<br/>currentUser 저장 + request started 로그"]
+  E --> F["ValidationPipe<br/>DTO validation"]
+  F --> G["Controller"]
+  G --> H["Service"]
+  H --> I["PrismaService"]
+  I --> J["PostgreSQL"]
+  J --> K["Service 결과 반환"]
+  K --> L["HttpLoggingInterceptor<br/>completed 로그"]
+  L --> M["HTTP Response"]
 
-  C -->|401/403| M["HttpExceptionFilter<br/>표준 error response"]
-  E -->|400| M
-  G -->|404/409/500| M
+  D -->|401/403| N["HttpExceptionFilter<br/>표준 error response"]
+  F -->|400| N
+  H -->|404/409/500| N
 ```
 
 실행 순서를 텍스트로 쓰면 다음과 같다.
@@ -45,19 +46,20 @@ Spring과 비교하면 다음처럼 이해할 수 있다.
 | NestJS | Spring MVC/Security와 비교 | 이 샘플의 예 |
 | --- | --- | --- |
 | Middleware | Servlet Filter에 가까움 | `RequestIdMiddleware` |
+| Request context | `ThreadLocal`, MDC, `SecurityContextHolder` 일부 역할 | `RequestContextService` |
 | Guard | Spring Security filter 또는 method security에 가까움 | `JwtAuthGuard`, `RolesGuard` |
 | Interceptor | `HandlerInterceptor`와 AOP 일부 역할을 섞은 느낌 | `HttpLoggingInterceptor` |
 | Pipe | `@Valid`, converter, argument validation에 가까움 | `ValidationPipe` |
 | ExceptionFilter | `@ControllerAdvice`, `@ExceptionHandler` | `HttpExceptionFilter` |
 | Decorator | annotation + argument resolver에 가까움 | `@CurrentUser()`, `@Roles()` |
 
-Spring에서 "Spring Context 밖/안"을 나누어 생각하듯이 보면, NestJS middleware는 Express layer에 가까운 바깥쪽이고 guard, interceptor, pipe, controller, provider는 Nest DI와 metadata를 적극적으로 사용하는 안쪽에 가깝다.
+Spring에서 "Spring Context 밖/안"을 나누어 생각하듯이 보면, NestJS middleware는 Express layer에 가까운 바깥쪽이고 guard, interceptor, pipe, controller, provider는 Nest DI와 metadata를 적극적으로 사용하는 안쪽에 가깝다. Request context의 자세한 설명은 `docs/nestjs-request-context.md`에 정리한다.
 
 ## Middleware
 
 Middleware는 route handler에 도달하기 전 Express layer에서 먼저 실행된다. Spring의 Servlet Filter처럼 Nest controller 내부 맥락보다 바깥쪽에 가깝다.
 
-이 샘플의 `RequestIdMiddleware`는 모든 요청에 `x-request-id`를 붙인다. Guard에서 `401`, `403`으로 막히더라도 request id는 이미 만들어져 있으므로 error response와 response header에 같은 id를 넣을 수 있다.
+이 샘플의 `RequestIdMiddleware`는 모든 요청에 `x-request-id`를 붙인다. 이어서 `RequestContextMiddleware`가 이 값을 `AsyncLocalStorage` context에 저장한다. Guard에서 `401`, `403`으로 막히더라도 request id는 이미 만들어져 있으므로 error response와 response header에 같은 id를 넣을 수 있다.
 
 ## Guard
 
@@ -71,7 +73,7 @@ Guard는 controller method 실행 여부를 결정한다. Spring Security에서 
 
 Interceptor는 controller 실행 전후를 감쌀 수 있다. Spring MVC의 `HandlerInterceptor`처럼 전후 처리를 할 수 있고, NestJS에서는 RxJS stream을 통해 response 이후 처리나 error 흐름도 다룰 수 있다.
 
-이 샘플의 `HttpLoggingInterceptor`는 요청 시작 로그를 남기고, controller/service가 정상 완료되면 status code와 duration을 기록한다. service나 pipe에서 exception이 발생하면 실패 로그를 남긴 뒤 exception을 다시 던져 `HttpExceptionFilter`가 응답 형식을 정리하게 한다.
+이 샘플의 `HttpLoggingInterceptor`는 guard 이후 만들어진 `request.user`를 request context에 복사하고 요청 시작 로그를 남긴다. controller/service가 정상 완료되면 status code와 duration을 기록한다. service나 pipe에서 exception이 발생하면 실패 로그를 남긴 뒤 exception을 다시 던져 `HttpExceptionFilter`가 응답 형식을 정리하게 한다.
 
 ## Pipe
 

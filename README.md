@@ -24,6 +24,7 @@ src/
     errors/
     logging/
     pagination/
+    request-context/
     security/
   config/
     environment.ts
@@ -49,6 +50,7 @@ src/
 - `common/errors`: reusable HTTP error response DTOs and exception filter
 - `common/logging`: request id middleware, structured logger, HTTP logging interceptor
 - `common/pagination`: reusable pagination DTOs, types, utilities
+- `common/request-context`: AsyncLocalStorage-based request context
 - `common/security`: password hashing helper
 - `config/environment.ts`: environment profile loading and validation
 - `auth`: signup/login, JWT strategy, auth/role guards
@@ -62,8 +64,10 @@ src/
 - `docs/learning-roadmap.md`: 학습 로드맵과 단계별 확장 방향
 - `docs/nestjs-spring-boot-comparison.md`: Spring Boot 관점의 NestJS 구조 비교
 - `docs/nestjs-request-lifecycle.md`: middleware, guard, interceptor, pipe, filter 요청 흐름
+- `docs/nestjs-request-context.md`: Spring MDC/SecurityContextHolder와 NestJS request context 비교
 - `docs/nestjs-prisma-transactions.md`: Spring `@Transactional`과 Prisma transaction 비교
 - `docs/nestjs-decorators.md`: NestJS decorator 문법 정리
+- `docs/vscode-debugging.md`: VSCode에서 NestJS/Jest breakpoint 디버깅하는 방법
 
 ## Setup
 
@@ -296,6 +300,8 @@ requestId, method, path, statusCode, durationMs
 ```
 
 4xx HTTP exception은 `warn`, 5xx와 알 수 없는 server error는 `error`로 기록합니다. `authorization`, `cookie`, `password`, `token`, `apiKey`, `secret` 계열 field는 logging metadata에 들어가더라도 `[masked]`로 치환합니다.
+
+`RequestContextService`는 요청 단위로 `requestId`, 인증된 `currentUserId`, `currentUserRole`을 보관합니다. `AppLogger`는 context가 있으면 이 값을 log metadata에 자동으로 포함합니다.
 
 ## Shutdown
 

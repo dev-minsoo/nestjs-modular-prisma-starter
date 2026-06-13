@@ -41,6 +41,7 @@ Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에, NestJS d
 - Swagger/OpenAPI 문서
 - signup/login, JWT access token, role guard
 - Prisma transaction helper와 signup transaction boundary
+- AsyncLocalStorage 기반 request context
 - `APP_ENV` 기반 environment profile
 - required environment variable validation
 - Docker Compose 기반 local PostgreSQL
@@ -106,8 +107,9 @@ NestJS의 공통 확장 지점을 하나씩 학습한다.
 - custom pipe
 - custom decorator
 - guard 기본 개념
+- request context with `AsyncLocalStorage`
 
-Status: initial `HttpExceptionFilter` complete. HTTP request/response logging complete.
+Status: initial `HttpExceptionFilter` complete. HTTP request/response logging and request context complete.
 
 현재 HTTP exception 응답은 다음 형태로 표준화한다.
 
@@ -209,6 +211,8 @@ Spring Boot에서 Logback pattern, JSON encoder, `OncePerRequestFilter`, MDC로 
 
 현재 구현은 `common/logging` 아래에 `LoggingModule`, `AppLogger`, `RequestIdMiddleware`, `HttpLoggingInterceptor`로 구성되어 있다. 4xx HTTP exception은 `warn`, 5xx server error는 `error`로 기록한다.
 
+Request context는 `common/request-context` 아래에 있으며, Spring의 MDC와 `SecurityContextHolder` 일부 역할을 `AsyncLocalStorage`로 실습한다.
+
 이 단계는 학습용 샘플을 작은 production-like API로 발전시키는 과정이다.
 
 ## Suggested Next Step
@@ -217,8 +221,8 @@ Spring Boot에서 Logback pattern, JSON encoder, `OncePerRequestFilter`, MDC로 
 
 추천 우선순위는 다음과 같다.
 
-1. request context: Spring의 `SecurityContextHolder`, MDC와 비교하면서 `AsyncLocalStorage` 기반 request context를 실습한다.
-2. 실제 DB 기반 e2e test: mock e2e에서 벗어나 migration, seed, HTTP 요청, DB 검증을 연결한다.
-3. 관계형 모델링: `Post` 또는 `Todo`를 추가해 relation query, nested write, cascade 정책을 다룬다.
+1. 실제 DB 기반 e2e test: mock e2e에서 벗어나 migration, seed, HTTP 요청, DB 검증을 연결한다.
+2. 관계형 모델링: `Post` 또는 `Todo`를 추가해 relation query, nested write, cascade 정책을 다룬다.
+3. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
 
 CI, Dockerfile, 배포 workflow는 실제 배포를 준비할 때 다시 다룬다.

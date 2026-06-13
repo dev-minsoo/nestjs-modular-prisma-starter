@@ -5,11 +5,13 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { lastValueFrom, of, throwError } from 'rxjs';
+import type { RequestContextService } from '../request-context';
 import { AppLogger } from './app-logger.service';
 import { HttpLoggingInterceptor } from './http-logging.interceptor';
 
 describe('HttpLoggingInterceptor', () => {
   let logger: Pick<AppLogger, 'error' | 'info' | 'warnWithMetadata'>;
+  let requestContext: Pick<RequestContextService, 'setCurrentUser'>;
   let interceptor: HttpLoggingInterceptor;
 
   beforeEach(() => {
@@ -18,13 +20,24 @@ describe('HttpLoggingInterceptor', () => {
       info: jest.fn(),
       warnWithMetadata: jest.fn(),
     };
-    interceptor = new HttpLoggingInterceptor(logger as AppLogger);
+    requestContext = {
+      setCurrentUser: jest.fn(),
+    };
+    interceptor = new HttpLoggingInterceptor(
+      logger as AppLogger,
+      requestContext as RequestContextService,
+    );
   });
 
   it('logs HTTP request start and completion', async () => {
     const context = createExecutionContext({
       responseStatusCode: 200,
       requestId: 'request-1',
+      user: {
+        id: 'user-1',
+        email: 'minsoo@example.com',
+        role: 'ADMIN',
+      },
     });
     const next: CallHandler = {
       handle: () => of({ ok: true }),
@@ -58,6 +71,11 @@ describe('HttpLoggingInterceptor', () => {
       }),
       'HttpLoggingInterceptor',
     );
+    expect(requestContext.setCurrentUser).toHaveBeenCalledWith({
+      id: 'user-1',
+      email: 'minsoo@example.com',
+      role: 'ADMIN',
+    });
   });
 
   it('logs server errors and rethrows the error', async () => {
@@ -121,9 +139,15 @@ describe('HttpLoggingInterceptor', () => {
   function createExecutionContext({
     requestId,
     responseStatusCode,
+    user,
   }: {
     requestId: string;
     responseStatusCode: number;
+    user?: {
+      id: string;
+      email: string;
+      role: string;
+    };
   }): ExecutionContext {
     return {
       getType: () => 'http',
@@ -133,6 +157,7 @@ describe('HttpLoggingInterceptor', () => {
           method: 'GET',
           originalUrl: '/api/health',
           url: '/health',
+          user,
         }),
         getResponse: () => ({
           statusCode: responseStatusCode,

@@ -5,11 +5,16 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import {
+  RequestContextMiddleware,
+  RequestContextModule,
+} from '../request-context';
 import { AppLogger } from './app-logger.service';
 import { HttpLoggingInterceptor } from './http-logging.interceptor';
 import { RequestIdMiddleware } from './request-id.middleware';
 
 @Module({
+  imports: [RequestContextModule],
   providers: [
     AppLogger,
     {
@@ -21,7 +26,7 @@ import { RequestIdMiddleware } from './request-id.middleware';
 })
 export class LoggingModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes({
+    consumer.apply(RequestIdMiddleware, RequestContextMiddleware).forRoutes({
       path: '*',
       method: RequestMethod.ALL,
     });

@@ -1,6 +1,7 @@
 import { Injectable, LoggerService } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '../../config/environment';
+import { RequestContextService } from '../request-context';
 import type { LogMetadata } from './types/log-metadata.type';
 import { maskSensitiveFields } from './utils/mask-sensitive-fields.util';
 
@@ -10,7 +11,10 @@ type LogLevel = 'debug' | 'error' | 'info' | 'verbose' | 'warn';
 export class AppLogger implements LoggerService {
   private readonly appEnv: AppEnvironment;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly requestContext: RequestContextService,
+  ) {
     this.appEnv = this.configService.get<AppEnvironment>('APP_ENV', 'local');
   }
 
@@ -62,7 +66,12 @@ export class AppLogger implements LoggerService {
   ): void {
     const timestamp = new Date().toISOString();
     const logMessage = this.formatMessage(message);
-    const safeMetadata = this.cleanMetadata(maskSensitiveFields(metadata));
+    const safeMetadata = this.cleanMetadata(
+      maskSensitiveFields({
+        ...this.requestContext.getLogMetadata(),
+        ...metadata,
+      }),
+    );
 
     if (this.appEnv === 'local') {
       this.writePrettyLog({

@@ -8,17 +8,25 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable, catchError, tap, throwError } from 'rxjs';
+import { RequestContextService, RequestContextUser } from '../request-context';
 import { AppLogger } from './app-logger.service';
 import type { RequestWithRequestId } from './types/request-with-request-id.type';
 import { getRequestId } from './utils/request-id.util';
 
 const SERVER_ERROR_MIN_STATUS = 500;
 
+type RequestWithLoggingContext = RequestWithRequestId & {
+  user?: RequestContextUser;
+};
+
 @Injectable()
 export class HttpLoggingInterceptor implements NestInterceptor {
   private readonly context = HttpLoggingInterceptor.name;
 
-  constructor(private readonly logger: AppLogger) {}
+  constructor(
+    private readonly logger: AppLogger,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() !== 'http') {
@@ -26,9 +34,12 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     }
 
     const httpContext = context.switchToHttp();
-    const request = httpContext.getRequest<RequestWithRequestId>();
+    const request = httpContext.getRequest<RequestWithLoggingContext>();
     const response = httpContext.getResponse<Response>();
     const startedAt = process.hrtime.bigint();
+
+    this.requestContext.setCurrentUser(request.user);
+
     const requestMetadata = {
       requestId: getRequestId(request),
       method: request.method,

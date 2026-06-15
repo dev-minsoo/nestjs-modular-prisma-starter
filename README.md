@@ -82,7 +82,6 @@ npm run start:local
 Test database:
 
 ```bash
-npm run docker:test:up
 npm run test:e2e
 ```
 
@@ -331,6 +330,7 @@ npm run db:studio     # Prisma Studio
 npm run docker:up     # start PostgreSQL
 npm run docker:down   # stop PostgreSQL
 npm run docker:test:up     # start test PostgreSQL on localhost:5433
+npm run docker:test:wait   # wait until test PostgreSQL is healthy
 npm run docker:test:down   # remove test PostgreSQL container
 npm run db:test:deploy     # apply migrations to the test database
 npm run db:test:reset      # reset the test database

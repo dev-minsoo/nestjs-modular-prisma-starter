@@ -172,7 +172,7 @@ Status: initial JWT auth and role guard complete.
 
 현재 e2e test는 health check 중심이며 DB는 mock으로 대체한다. 이후에는 실제 test database를 사용하는 e2e 흐름으로 확장한다.
 
-Status: real DB-backed auth/users e2e flow added.
+Status: real DB-backed auth/users e2e flow added with automated test DB startup.
 
 - test 전용 database 구성: complete
 - e2e test 실행 전 migration 적용: complete

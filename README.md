@@ -83,7 +83,7 @@ Test database:
 
 ```bash
 npm run docker:test:up
-npm run db:test:deploy
+npm run test:e2e
 ```
 
 Swagger UI:
@@ -324,7 +324,7 @@ npm run start:prod    # production build runner with APP_ENV=prod
 npm run build         # compile
 npm run lint          # eslint
 npm test              # unit tests
-npm run test:e2e      # e2e test
+npm run test:e2e      # generate Prisma client, apply test DB migrations, and run e2e tests
 npm run db:generate   # generate Prisma client
 npm run db:migrate    # create/apply local migration
 npm run db:studio     # Prisma Studio

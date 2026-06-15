@@ -1,4 +1,5 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, PrismaClient } from '../generated/prisma/client';
 
 export type PrismaTransactionClient = Prisma.TransactionClient;
@@ -15,6 +16,12 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  constructor(configService: ConfigService) {
+    super({
+      datasourceUrl: configService.getOrThrow<string>('DATABASE_URL'),
+    });
+  }
+
   async onModuleInit() {
     await this.$connect();
   }

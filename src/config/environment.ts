@@ -1,5 +1,8 @@
 export const APP_ENVIRONMENTS = ['local', 'dev', 'prod', 'test'] as const;
 
+export const DEFAULT_TEST_DATABASE_URL =
+  'postgresql://nest:nest@localhost:5433/nestjs_modular_test?schema=public';
+
 export type AppEnvironment = (typeof APP_ENVIRONMENTS)[number];
 
 type RawEnvironment = Record<string, unknown>;
@@ -39,12 +42,15 @@ export function resolveAppEnv(
 }
 
 export function getEnvFilePaths(appEnv = resolveAppEnv()): string[] {
-  const profileFiles =
-    appEnv === 'local'
-      ? ['.env.local']
-      : [`.env.${appEnv}.local`, `.env.${appEnv}`];
+  if (appEnv === 'local') {
+    return ['.env.local', '.env'];
+  }
 
-  return [...profileFiles, '.env'];
+  if (appEnv === 'test') {
+    return ['.env.test.local', '.env.test'];
+  }
+
+  return [`.env.${appEnv}.local`, `.env.${appEnv}`, '.env'];
 }
 
 export function validateEnvironment(config: RawEnvironment) {
@@ -53,7 +59,10 @@ export function validateEnvironment(config: RawEnvironment) {
     readOptionalString(config.NODE_ENV),
   );
   const port = parsePort(readOptionalString(config.PORT));
-  const databaseUrl = parseDatabaseUrl(readOptionalString(config.DATABASE_URL));
+  const databaseUrl = parseDatabaseUrl(
+    readOptionalString(config.DATABASE_URL),
+    appEnv,
+  );
   const corsOrigins = parseCorsOrigins(readOptionalString(config.CORS_ORIGIN));
   const jwtAccessTokenSecret = parseJwtAccessTokenSecret(
     readOptionalString(config.JWT_ACCESS_TOKEN_SECRET),
@@ -100,15 +109,22 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
-function parseDatabaseUrl(value: string | undefined): string {
-  if (!value) {
+function parseDatabaseUrl(
+  value: string | undefined,
+  appEnv: AppEnvironment,
+): string {
+  const databaseUrl =
+    value?.trim() ||
+    (appEnv === 'test' ? DEFAULT_TEST_DATABASE_URL : undefined);
+
+  if (!databaseUrl) {
     throw new Error('DATABASE_URL is required');
   }
 
   let url: URL;
 
   try {
-    url = new URL(value);
+    url = new URL(databaseUrl);
   } catch {
     throw new Error('DATABASE_URL must be a valid URL');
   }
@@ -117,7 +133,7 @@ function parseDatabaseUrl(value: string | undefined): string {
     throw new Error('DATABASE_URL must use postgresql:// or postgres://');
   }
 
-  return value;
+  return databaseUrl;
 }
 
 function parseCorsOrigins(value: string | undefined): string[] {

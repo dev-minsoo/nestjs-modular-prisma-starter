@@ -16,5 +16,25 @@ services:
       timeout: 3s
       retries: 10
 
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: nestjs-modular-prisma-postgres-test
+    profiles:
+      - test
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: nest
+      POSTGRES_PASSWORD: nest
+      POSTGRES_DB: nestjs_modular_test
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nest -d nestjs_modular_test']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   postgres_data:
+  postgres_test_data:

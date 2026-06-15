@@ -172,7 +172,9 @@ Status: initial JWT auth and role guard complete.
 
 현재 e2e test는 health check 중심이며 DB는 mock으로 대체한다. 이후에는 실제 test database를 사용하는 e2e 흐름으로 확장한다.
 
-- test 전용 database 구성
+Status: test database Docker profile added. Real DB-backed e2e specs pending.
+
+- test 전용 database 구성: complete
 - e2e test 실행 전 migration 적용
 - test seed 또는 fixture 구성
 - HTTP request로 실제 CRUD 검증
@@ -221,7 +223,7 @@ Request context는 `common/request-context` 아래에 있으며, Spring의 MDC�
 
 추천 우선순위는 다음과 같다.
 
-1. 실제 DB 기반 e2e test: mock e2e에서 벗어나 migration, seed, HTTP 요청, DB 검증을 연결한다.
+1. 실제 DB 기반 e2e test: 구성된 test DB에 migration, seed, HTTP 요청, DB 검증을 연결한다.
 2. 관계형 모델링: `Post` 또는 `Todo`를 추가해 relation query, nested write, cascade 정책을 다룬다.
 3. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
 

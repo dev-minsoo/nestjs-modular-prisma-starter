@@ -79,6 +79,13 @@ npm run db:migrate -- --name init
 npm run start:local
 ```
 
+Test database:
+
+```bash
+npm run docker:test:up
+npm run db:test:deploy
+```
+
 Swagger UI:
 
 ```text
@@ -255,10 +262,10 @@ APP_ENV=test   # Jest/test runtime
 local: .env.local -> .env
 dev:   .env.dev.local -> .env.dev -> .env
 prod:  .env.prod.local -> .env.prod -> .env
-test:  .env.test.local -> .env.test -> .env
+test:  .env.test.local -> .env.test
 ```
 
-`APP_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`, `JWT_ACCESS_TOKEN_SECRET`을 사용할 수 있습니다. `DATABASE_URL`은 필수이며 누락되거나 PostgreSQL URL이 아니면 앱이 부팅에 실패합니다. `JWT_ACCESS_TOKEN_SECRET`은 `test`를 제외한 profile에서 필수입니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
+`APP_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`, `JWT_ACCESS_TOKEN_SECRET`을 사용할 수 있습니다. `DATABASE_URL`은 `test`를 제외한 profile에서 필수이며 누락되거나 PostgreSQL URL이 아니면 앱이 부팅에 실패합니다. `APP_ENV=test`는 기본 test DB URL인 `postgresql://nest:nest@localhost:5433/nestjs_modular_test?schema=public`을 사용하며, `.env.test.local` 또는 `.env.test`로 override할 수 있습니다. `JWT_ACCESS_TOKEN_SECRET`은 `test`를 제외한 profile에서 필수입니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
 
 Example:
 
@@ -323,6 +330,10 @@ npm run db:migrate    # create/apply local migration
 npm run db:studio     # Prisma Studio
 npm run docker:up     # start PostgreSQL
 npm run docker:down   # stop PostgreSQL
+npm run docker:test:up     # start test PostgreSQL on localhost:5433
+npm run docker:test:down   # remove test PostgreSQL container
+npm run db:test:deploy     # apply migrations to the test database
+npm run db:test:reset      # reset the test database
 ```
 
 ## Notes

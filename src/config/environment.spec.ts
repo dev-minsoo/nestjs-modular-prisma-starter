@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TEST_DATABASE_URL,
   getEnvFilePaths,
   resolveAppEnv,
   validateEnvironment,
@@ -21,6 +22,10 @@ describe('environment configuration', () => {
       '.env.dev',
       '.env',
     ]);
+  });
+
+  it('keeps test env files isolated from the base .env file', () => {
+    expect(getEnvFilePaths('test')).toEqual(['.env.test.local', '.env.test']);
   });
 
   it('validates and normalizes environment values', () => {
@@ -52,6 +57,18 @@ describe('environment configuration', () => {
     ).toEqual(
       expect.objectContaining({
         JWT_ACCESS_TOKEN_SECRET: 'test-jwt-access-token-secret',
+      }),
+    );
+  });
+
+  it('uses the default test database URL in test environment', () => {
+    expect(
+      validateEnvironment({
+        APP_ENV: 'test',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        DATABASE_URL: DEFAULT_TEST_DATABASE_URL,
       }),
     );
   });

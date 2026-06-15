@@ -1,57 +1,34 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from '../src/app/app.module';
-import { AppLogger } from '../src/common/logging';
-import { PrismaService } from '../src/database/prisma.service';
 import { Role } from '../src/generated/prisma/enums';
+import {
+  bearerToken,
+  cleanupDatabase,
+  closeE2eTestContext,
+  createE2eTestContext,
+  E2eTestContext,
+  expectErrorResponse,
+  httpServer,
+  signupUser,
+  TEST_PASSWORD,
+} from './e2e-test.helpers';
 
 describe('AppModule with real database (e2e)', () => {
-  let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let context: E2eTestContext;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(AppLogger)
-      .useValue({
-        error: jest.fn(),
-        info: jest.fn(),
-        warnWithMetadata: jest.fn(),
-      })
-      .compile();
-
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
-    await app.init();
-
-    const configService = app.get(ConfigService);
-    assertTestDatabaseUrl(configService.getOrThrow<string>('DATABASE_URL'));
-
-    prisma = app.get(PrismaService);
+    context = await createE2eTestContext();
   });
 
   beforeEach(async () => {
-    await prisma.user.deleteMany();
+    await cleanupDatabase(context.prisma);
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany();
-    await app.close();
+    await closeE2eTestContext(context);
   });
 
   it('/api/health (GET) checks the real database connection', () => {
-    return request(app.getHttpServer())
+    return request(httpServer(context.app))
       .get('/api/health')
       .expect(200)
       .expect(({ body }) => {
@@ -67,16 +44,12 @@ describe('AppModule with real database (e2e)', () => {
   });
 
   it('signs up, authenticates, lists, updates, and deletes users through PostgreSQL', async () => {
-    const adminSignup = await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send({
-        email: 'db-admin@example.com',
-        name: 'DB Admin',
-        password: 'strong-password',
-      })
-      .expect(201);
+    const adminSignup = await signupUser(context.app, {
+      email: 'db-admin@example.com',
+      name: 'DB Admin',
+    });
 
-    expect(adminSignup.body).toEqual(
+    expect(adminSignup).toEqual(
       expect.objectContaining({
         accessToken: expect.any(String) as unknown,
         tokenType: 'Bearer',
@@ -89,18 +62,12 @@ describe('AppModule with real database (e2e)', () => {
       }),
     );
 
-    const adminToken = adminSignup.body.accessToken as string;
+    const userSignup = await signupUser(context.app, {
+      email: 'db-user@example.com',
+      name: 'DB User',
+    });
 
-    const userSignup = await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send({
-        email: 'db-user@example.com',
-        name: 'DB User',
-        password: 'strong-password',
-      })
-      .expect(201);
-
-    expect(userSignup.body).toEqual(
+    expect(userSignup).toEqual(
       expect.objectContaining({
         accessToken: expect.any(String) as unknown,
         user: expect.objectContaining({
@@ -111,25 +78,25 @@ describe('AppModule with real database (e2e)', () => {
       }),
     );
 
-    const userId = userSignup.body.user.id as string;
-    const storedUser = await prisma.user.findUniqueOrThrow({
+    const userId = userSignup.user.id;
+    const storedUser = await context.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
-    expect(storedUser.passwordHash).not.toBe('strong-password');
+    expect(storedUser.passwordHash).not.toBe(TEST_PASSWORD);
 
-    const login = await request(app.getHttpServer())
+    const login = await request(httpServer(context.app))
       .post('/api/auth/login')
       .send({
         email: 'db-user@example.com',
-        password: 'strong-password',
+        password: TEST_PASSWORD,
       })
       .expect(200);
 
-    const userToken = login.body.accessToken as string;
+    const userToken = (login.body as { accessToken: string }).accessToken;
 
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .get('/api/auth/me')
-      .set('Authorization', `Bearer ${userToken}`)
+      .set('Authorization', bearerToken(userToken))
       .expect(200)
       .expect(({ body }) => {
         expect(body).toEqual(
@@ -141,9 +108,9 @@ describe('AppModule with real database (e2e)', () => {
         );
       });
 
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .get('/api/users')
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', bearerToken(adminSignup.accessToken))
       .query({
         search: 'db-',
         orderBy: 'email',
@@ -151,7 +118,12 @@ describe('AppModule with real database (e2e)', () => {
       })
       .expect(200)
       .expect(({ body }) => {
-        expect(body.items).toEqual([
+        const responseBody = body as {
+          items: unknown[];
+          meta: Record<string, unknown>;
+        };
+
+        expect(responseBody.items).toEqual([
           expect.objectContaining({
             email: 'db-admin@example.com',
             role: Role.ADMIN,
@@ -161,7 +133,7 @@ describe('AppModule with real database (e2e)', () => {
             role: Role.USER,
           }),
         ]);
-        expect(body.meta).toEqual(
+        expect(responseBody.meta).toEqual(
           expect.objectContaining({
             page: 1,
             pageSize: 20,
@@ -171,9 +143,9 @@ describe('AppModule with real database (e2e)', () => {
         );
       });
 
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .patch(`/api/users/${userId}`)
-      .set('Authorization', `Bearer ${userToken}`)
+      .set('Authorization', bearerToken(userToken))
       .send({
         name: 'DB User Updated',
       })
@@ -188,20 +160,20 @@ describe('AppModule with real database (e2e)', () => {
       });
 
     await expect(
-      prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+      context.prisma.user.findUniqueOrThrow({ where: { id: userId } }),
     ).resolves.toEqual(
       expect.objectContaining({
         name: 'DB User Updated',
       }),
     );
 
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .delete(`/api/users/${userId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', bearerToken(adminSignup.accessToken))
       .expect(204);
 
     await expect(
-      prisma.user.findUnique({ where: { id: userId } }),
+      context.prisma.user.findUnique({ where: { id: userId } }),
     ).resolves.toBeNull();
   });
 
@@ -209,140 +181,98 @@ describe('AppModule with real database (e2e)', () => {
     const payload = {
       email: 'db-duplicate@example.com',
       name: 'DB Duplicate',
-      password: 'strong-password',
     };
 
-    await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send(payload)
-      .expect(201);
+    await signupUser(context.app, payload);
 
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .post('/api/auth/signup')
-      .send(payload)
+      .send({
+        password: TEST_PASSWORD,
+        ...payload,
+      })
       .expect(409)
       .expect(({ body }) => {
-        expect(body).toEqual(
-          expect.objectContaining({
-            statusCode: 409,
-            code: 'CONFLICT',
-            message: 'A user with this email already exists',
-            path: '/api/auth/signup',
-          }),
-        );
+        expectErrorResponse(body, {
+          statusCode: 409,
+          code: 'CONFLICT',
+          message: 'A user with this email already exists',
+          path: '/api/auth/signup',
+        });
       });
   });
 
   it('/api/users (GET) rejects missing credentials and non-admin users', async () => {
-    await request(app.getHttpServer()).get('/api/users').expect(401);
+    await request(httpServer(context.app)).get('/api/users').expect(401);
 
-    await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send({
-        email: 'db-admin@example.com',
-        name: 'DB Admin',
-        password: 'strong-password',
-      })
-      .expect(201);
+    await signupUser(context.app, {
+      email: 'db-admin@example.com',
+      name: 'DB Admin',
+    });
+    const userSignup = await signupUser(context.app, {
+      email: 'db-user@example.com',
+      name: 'DB User',
+    });
 
-    const userSignup = await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send({
-        email: 'db-user@example.com',
-        name: 'DB User',
-        password: 'strong-password',
-      })
-      .expect(201);
-
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .get('/api/users')
-      .set('Authorization', `Bearer ${userSignup.body.accessToken as string}`)
+      .set('Authorization', bearerToken(userSignup.accessToken))
       .expect(403)
       .expect(({ body }) => {
-        expect(body).toEqual(
-          expect.objectContaining({
-            statusCode: 403,
-            code: 'FORBIDDEN',
-            message: 'Forbidden resource',
-            path: '/api/users',
-          }),
-        );
+        expectErrorResponse(body, {
+          statusCode: 403,
+          code: 'FORBIDDEN',
+          message: 'Forbidden resource',
+          path: '/api/users',
+        });
       });
   });
 
   it('/api/users/:id (GET) maps missing records from PostgreSQL to 404', async () => {
-    const signup = await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send({
-        email: 'db-user@example.com',
-        name: 'DB User',
-        password: 'strong-password',
-      })
-      .expect(201);
-
+    const signup = await signupUser(context.app, {
+      email: 'db-user@example.com',
+      name: 'DB User',
+    });
     const missingUserId = '00000000-0000-4000-8000-000000000000';
 
-    await request(app.getHttpServer())
+    await request(httpServer(context.app))
       .get(`/api/users/${missingUserId}`)
-      .set('Authorization', `Bearer ${signup.body.accessToken as string}`)
+      .set('Authorization', bearerToken(signup.accessToken))
       .expect(404)
       .expect(({ body }) => {
-        expect(body).toEqual(
-          expect.objectContaining({
-            statusCode: 404,
-            code: 'NOT_FOUND',
-            message: `User ${missingUserId} was not found`,
-            path: `/api/users/${missingUserId}`,
-          }),
-        );
+        expectErrorResponse(body, {
+          statusCode: 404,
+          code: 'NOT_FOUND',
+          message: `User ${missingUserId} was not found`,
+          path: `/api/users/${missingUserId}`,
+        });
       });
   });
 
   it('/api/users/:id (PATCH) maps real unique constraint failures to 409', async () => {
-    const adminSignup = await request(app.getHttpServer())
-      .post('/api/auth/signup')
-      .send({
-        email: 'db-admin@example.com',
-        name: 'DB Admin',
-        password: 'strong-password',
-      })
-      .expect(201);
+    const adminSignup = await signupUser(context.app, {
+      email: 'db-admin@example.com',
+      name: 'DB Admin',
+    });
+    const userSignup = await signupUser(context.app, {
+      email: 'db-user@example.com',
+      name: 'DB User',
+    });
 
-    const userSignup = await request(app.getHttpServer())
-      .post('/api/auth/signup')
+    await request(httpServer(context.app))
+      .patch(`/api/users/${userSignup.user.id}`)
+      .set('Authorization', bearerToken(userSignup.accessToken))
       .send({
-        email: 'db-user@example.com',
-        name: 'DB User',
-        password: 'strong-password',
-      })
-      .expect(201);
-
-    await request(app.getHttpServer())
-      .patch(`/api/users/${userSignup.body.user.id as string}`)
-      .set('Authorization', `Bearer ${userSignup.body.accessToken as string}`)
-      .send({
-        email: adminSignup.body.user.email,
+        email: adminSignup.user.email,
       })
       .expect(409)
       .expect(({ body }) => {
-        expect(body).toEqual(
-          expect.objectContaining({
-            statusCode: 409,
-            code: 'CONFLICT',
-            message: 'A user with this email already exists',
-            path: `/api/users/${userSignup.body.user.id as string}`,
-          }),
-        );
+        expectErrorResponse(body, {
+          statusCode: 409,
+          code: 'CONFLICT',
+          message: 'A user with this email already exists',
+          path: `/api/users/${userSignup.user.id}`,
+        });
       });
   });
 });
-
-function assertTestDatabaseUrl(databaseUrl: string): void {
-  const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '');
-
-  if (!databaseName.endsWith('_test')) {
-    throw new Error(
-      `Refusing to run destructive DB E2E cleanup against non-test database: ${databaseName}`,
-    );
-  }
-}

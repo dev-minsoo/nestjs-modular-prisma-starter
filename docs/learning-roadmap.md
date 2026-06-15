@@ -33,7 +33,9 @@ Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에, NestJS d
 - module-based 구조
 - PostgreSQL + Prisma ORM
 - `User` CRUD API
+- `User 1:N Todo` relational CRUD API
 - users list pagination, search, ordering
+- todos list pagination, search, completion filter, ordering
 - common pagination DTO/type/helper
 - common HTTP error response format
 - DTO validation
@@ -131,16 +133,23 @@ Status: initial `HttpExceptionFilter` complete. HTTP request/response logging an
 
 `User` 하나만 있는 모델에서 벗어나 관계형 모델을 추가한다.
 
-Status: transaction boundary helper added. Relational model expansion pending.
+Status: Todo relational model complete.
 
-- `Post` 또는 `Todo` 모델 추가
-- `User 1:N Post` 관계 구성
-- relation query 실습
+- `Todo` 모델 추가: complete
+- `User 1:N Todo` 관계 구성: complete
+- relation query 실습: complete
 - nested write 예제 추가
-- cascade delete 정책 검토
+- cascade delete 정책 검토: complete
 - seed 데이터 추가
 
-이 단계의 목적은 Prisma를 통해 관계형 데이터를 다루는 방법과 service layer에서 transaction boundary를 잡는 방법을 익히는 것이다.
+이 단계의 목적은 Prisma를 통해 관계형 데이터를 다루는 방법과 service layer에서 ownership authorization을 잡는 방법을 익히는 것이다.
+
+현재 Todo 도메인은 다음 정책을 사용한다.
+
+- `USER`: 자신의 Todo 생성/조회/수정/삭제
+- `ADMIN`: 모든 사용자의 Todo 조회/수정/삭제
+- 일반 사용자가 다른 사용자의 Todo에 접근하면 `403 Forbidden`
+- User 삭제 시 Todo는 `ON DELETE CASCADE`로 함께 삭제
 
 현재 transaction boundary 예제는 `AuthService.signup()`에 있다. `ADMIN` 사용자 수 조회와 user 생성을 `PrismaService.runInTransaction()`으로 묶고, `Serializable` isolation과 retry를 사용한다. Spring `@Transactional`과의 비교는 `docs/nestjs-prisma-transactions.md`에 정리한다.
 
@@ -224,8 +233,8 @@ Request context는 `common/request-context` 아래에 있으며, Spring의 MDC�
 
 추천 우선순위는 다음과 같다.
 
-1. 실제 DB 기반 e2e test: 구성된 test DB에 migration, seed, HTTP 요청, DB 검증을 연결한다.
-2. 관계형 모델링: `Post` 또는 `Todo`를 추가해 relation query, nested write, cascade 정책을 다룬다.
-3. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
+1. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
+2. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
+3. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
 
 CI, Dockerfile, 배포 workflow는 실제 배포를 준비할 때 다시 다룬다.

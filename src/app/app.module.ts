@@ -8,6 +8,7 @@ import { getEnvFilePaths, validateEnvironment } from '../config/environment';
 import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../modules/auth';
 import { HealthModule } from '../modules/health/health.module';
+import { TodosModule } from '../modules/todos/todos.module';
 import { UsersModule } from '../modules/users/users.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { UsersModule } from '../modules/users/users.module';
     HealthModule,
     AuthModule,
     UsersModule,
+    TodosModule,
   ],
   providers: [
     {

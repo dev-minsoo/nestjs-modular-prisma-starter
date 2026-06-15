@@ -37,6 +37,22 @@ export type SignupResult = {
   };
 };
 
+export type TodoPayload = {
+  title: string;
+  description?: string | null;
+  completed?: boolean;
+};
+
+export type TodoResult = {
+  id: string;
+  title: string;
+  description: string | null;
+  completed: boolean;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export async function createE2eTestContext(): Promise<E2eTestContext> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
@@ -77,6 +93,7 @@ export async function closeE2eTestContext(
 }
 
 export async function cleanupDatabase(prisma: PrismaService): Promise<void> {
+  await prisma.todo.deleteMany();
   await prisma.user.deleteMany();
 }
 
@@ -97,6 +114,20 @@ export async function signupUser(
 
 export function bearerToken(accessToken: string): string {
   return `Bearer ${accessToken}`;
+}
+
+export async function createTodo(
+  app: E2eApp,
+  accessToken: string,
+  payload: TodoPayload,
+): Promise<TodoResult> {
+  const response = await request(httpServer(app))
+    .post('/api/todos')
+    .set('Authorization', bearerToken(accessToken))
+    .send(payload)
+    .expect(201);
+
+  return response.body as TodoResult;
 }
 
 export function httpServer(app: E2eApp): App {

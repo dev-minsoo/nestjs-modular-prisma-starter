@@ -34,6 +34,11 @@ src/
   modules/
     auth/
     health/
+    todos/
+      dto/
+      todos.controller.ts
+      todos.service.ts
+      todos.module.ts
     users/
       dto/
       users.controller.ts
@@ -54,6 +59,8 @@ src/
 - `common/security`: password hashing helper
 - `config/environment.ts`: environment profile loading and validation
 - `auth`: signup/login, JWT strategy, auth/role guards
+- `todos.controller.ts`: authenticated todo HTTP endpoints
+- `todos.service.ts`: todo ownership, authorization, and database access coordination
 - `prisma.service.ts`: Prisma Client provider
 - `users.controller.ts`: users HTTP endpoints
 - `users.service.ts`: users business logic and database access coordination
@@ -216,6 +223,54 @@ orderDirection  asc | desc
 ```
 
 Duplicate email은 `409 Conflict`, 없는 user 조회/수정/삭제는 `404 Not Found`로 응답합니다. 인증되지 않은 요청은 `401 Unauthorized`, role이 부족한 요청은 `403 Forbidden`으로 응답합니다.
+
+Todos API:
+
+```text
+POST   /api/todos
+GET    /api/todos?page=1&pageSize=20&search=nestjs&completed=false&orderBy=createdAt&orderDirection=desc
+GET    /api/todos/:id
+PATCH  /api/todos/:id
+DELETE /api/todos/:id
+```
+
+모든 todos API는 JWT 인증이 필요합니다. `USER`는 자신의 Todo만 조회/수정/삭제할 수 있고, `ADMIN`은 모든 사용자의 Todo를 조회/수정/삭제할 수 있습니다. 다른 사용자의 Todo에 접근한 일반 사용자는 `403 Forbidden`을 받습니다.
+
+Create todo:
+
+```bash
+curl -X POST http://localhost:3000/api/todos \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -d '{"title":"Read Prisma relations","description":"Focus on owner relation and cascade delete"}'
+```
+
+Todo response:
+
+```json
+{
+  "id": "3e04e290-47a2-47bf-bba5-955055c60115",
+  "title": "Read Prisma relations",
+  "description": "Focus on owner relation and cascade delete",
+  "completed": false,
+  "ownerId": "2e0a35e2-e1d5-4b3f-a5c6-d15ce8f7a524",
+  "createdAt": "2026-06-16T05:00:00.000Z",
+  "updatedAt": "2026-06-16T05:00:00.000Z"
+}
+```
+
+Todos list query options:
+
+```text
+page            positive integer, default 1
+pageSize        1-100, default 20
+search          searches title and description
+completed       true | false
+orderBy         createdAt | updatedAt | title | completed
+orderDirection  asc | desc
+```
+
+User 삭제 시 해당 user가 소유한 Todo는 PostgreSQL foreign key `ON DELETE CASCADE` 정책으로 함께 삭제됩니다.
 
 Error response:
 

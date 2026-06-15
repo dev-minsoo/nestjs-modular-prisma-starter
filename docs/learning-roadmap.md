@@ -178,7 +178,8 @@ Status: real DB-backed auth/users e2e flow added with automated test DB startup.
 - e2e test 실행 전 migration 적용: complete
 - test seed 또는 fixture 구성: per-test cleanup and HTTP signup fixtures
 - HTTP request로 실제 CRUD 검증: complete
-- validation, conflict, not found 케이스 검증
+- auth failure, authorization failure, conflict, not found 케이스 검증: complete
+- validation 케이스 검증: covered by mock-backed e2e
 - test 종료 후 데이터 정리
 
 이 단계의 목적은 NestJS API를 실제 실행 흐름에 가깝게 검증하는 방법을 익히는 것이다.

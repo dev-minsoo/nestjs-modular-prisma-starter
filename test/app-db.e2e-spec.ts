@@ -232,6 +232,109 @@ describe('AppModule with real database (e2e)', () => {
         );
       });
   });
+
+  it('/api/users (GET) rejects missing credentials and non-admin users', async () => {
+    await request(app.getHttpServer()).get('/api/users').expect(401);
+
+    await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'db-admin@example.com',
+        name: 'DB Admin',
+        password: 'strong-password',
+      })
+      .expect(201);
+
+    const userSignup = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'db-user@example.com',
+        name: 'DB User',
+        password: 'strong-password',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get('/api/users')
+      .set('Authorization', `Bearer ${userSignup.body.accessToken as string}`)
+      .expect(403)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            statusCode: 403,
+            code: 'FORBIDDEN',
+            message: 'Forbidden resource',
+            path: '/api/users',
+          }),
+        );
+      });
+  });
+
+  it('/api/users/:id (GET) maps missing records from PostgreSQL to 404', async () => {
+    const signup = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'db-user@example.com',
+        name: 'DB User',
+        password: 'strong-password',
+      })
+      .expect(201);
+
+    const missingUserId = '00000000-0000-4000-8000-000000000000';
+
+    await request(app.getHttpServer())
+      .get(`/api/users/${missingUserId}`)
+      .set('Authorization', `Bearer ${signup.body.accessToken as string}`)
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            statusCode: 404,
+            code: 'NOT_FOUND',
+            message: `User ${missingUserId} was not found`,
+            path: `/api/users/${missingUserId}`,
+          }),
+        );
+      });
+  });
+
+  it('/api/users/:id (PATCH) maps real unique constraint failures to 409', async () => {
+    const adminSignup = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'db-admin@example.com',
+        name: 'DB Admin',
+        password: 'strong-password',
+      })
+      .expect(201);
+
+    const userSignup = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'db-user@example.com',
+        name: 'DB User',
+        password: 'strong-password',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/users/${userSignup.body.user.id as string}`)
+      .set('Authorization', `Bearer ${userSignup.body.accessToken as string}`)
+      .send({
+        email: adminSignup.body.user.email,
+      })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            statusCode: 409,
+            code: 'CONFLICT',
+            message: 'A user with this email already exists',
+            path: `/api/users/${userSignup.body.user.id as string}`,
+          }),
+        );
+      });
+  });
 });
 
 function assertTestDatabaseUrl(databaseUrl: string): void {

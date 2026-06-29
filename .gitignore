@@ -1,6 +1,7 @@
 node_modules
 dist
 coverage
+.serverless
 
 # Keep environment variables out of version control
 .env

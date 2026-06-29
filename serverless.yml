@@ -1,0 +1,92 @@
+service: nestjs-modular-prisma-sample
+
+frameworkVersion: '3'
+useDotenv: true
+
+plugins:
+  - serverless-offline
+
+custom:
+  stage: ${opt:stage, 'local'}
+  appEnv: ${env:APP_ENV, self:custom.stage}
+  dynamodbTableName: ${env:DYNAMODB_TABLE_NAME, 'nestjs-modular-${self:custom.stage}'}
+  serverless-offline:
+    httpPort: ${env:SERVERLESS_OFFLINE_PORT, 3000}
+    lambdaPort: ${env:SERVERLESS_OFFLINE_LAMBDA_PORT, 3002}
+    noPrependStageInUrl: true
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  architecture: arm64
+  region: ${env:AWS_REGION, 'us-east-1'}
+  stage: ${self:custom.stage}
+  memorySize: 512
+  timeout: 30
+  logRetentionInDays: 14
+  httpApi:
+    cors: true
+  environment:
+    APP_ENV: ${self:custom.appEnv}
+    PERSISTENCE_DRIVER: ${env:PERSISTENCE_DRIVER, 'dynamo'}
+    PORT: ${env:PORT, '3000'}
+    DATABASE_URL: ${env:DATABASE_URL, ''}
+    CORS_ORIGIN: ${env:CORS_ORIGIN, ''}
+    JWT_ACCESS_TOKEN_SECRET: ${env:JWT_ACCESS_TOKEN_SECRET, ''}
+    AWS_REGION: ${env:AWS_REGION, 'us-east-1'}
+    AWS_ACCESS_KEY_ID: ${env:AWS_ACCESS_KEY_ID, ''}
+    AWS_SECRET_ACCESS_KEY: ${env:AWS_SECRET_ACCESS_KEY, ''}
+    DYNAMODB_ENDPOINT: ${env:DYNAMODB_ENDPOINT, ''}
+    DYNAMODB_TABLE_NAME: ${self:custom.dynamodbTableName}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:DeleteItem
+            - dynamodb:DescribeTable
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:Scan
+            - dynamodb:TransactWriteItems
+          Resource:
+            - Fn::GetAtt:
+                - AppDynamoTable
+                - Arn
+
+functions:
+  api:
+    handler: dist/src/lambda.handler
+    events:
+      - httpApi:
+          path: /
+          method: ANY
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+package:
+  patterns:
+    - '!coverage/**'
+    - '!node_modules/.cache/**'
+    - '!src/**'
+    - '!test/**'
+    - '!docs/**'
+    - '!prisma/migrations/**'
+    - 'dist/**'
+    - 'node_modules/**'
+    - 'package.json'
+
+resources:
+  Resources:
+    AppDynamoTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.dynamodbTableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH

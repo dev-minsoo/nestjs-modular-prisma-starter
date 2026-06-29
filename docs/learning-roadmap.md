@@ -236,13 +236,13 @@ Request context는 `common/request-context` 아래에 있으며, Spring의 MDC�
 
 AWS Serverless Architecture를 비교 학습하기 위한 별도 persistence track을 추가한다.
 
-Status: repository boundary and initial DynamoDB/LocalStack adapter added.
+Status: repository boundary, initial DynamoDB/LocalStack adapter, Lambda handler, and Serverless Framework HTTP API config added.
 
 - `USER_REPOSITORY`, `TODO_REPOSITORY` port 기준으로 Prisma adapter와 DynamoDB adapter를 나란히 구성한다.
 - Prisma/PostgreSQL 트랙은 relation, migration, transaction, foreign key, offset pagination을 실습한다.
 - DynamoDB 트랙은 LocalStack, conditional write, transaction write, scan 기반 baseline을 먼저 실습한다.
 - NestJS HTTP layer는 되도록 공유하되, persistence adapter와 infrastructure 설정은 명확히 분리한다.
-- Lambda/API Gateway 진입점은 repository boundary가 안정화된 뒤 추가한다.
+- Lambda/API Gateway 진입점은 `src/lambda.ts`와 `serverless.yml`로 추가한다.
 
 초기 DynamoDB 설계 후보는 다음과 같다.
 
@@ -274,9 +274,10 @@ USER#{userId} / TODO#{todoId}  -> owner-scoped todo lookup item or GSI candidate
 
 1. DynamoDB access pattern 개선: owner todo query, admin list query, email lookup을 GSI/item pattern으로 재설계한다.
 2. DynamoDB cursor pagination: 현재 page/pageSize 응답과 DynamoDB `LastEvaluatedKey` 기반 cursor 응답의 차이를 비교한다.
-3. Lambda/API Gateway entrypoint: NestJS app을 Lambda handler로 감싸고 serverless-local 또는 LocalStack API Gateway 실습을 추가한다.
-4. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
-5. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
-6. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
+3. Lambda/API Gateway smoke test 자동화: `serverless-offline` + LocalStack DynamoDB로 signup/login/todos API를 e2e로 검증한다.
+4. AWS 배포 검증: `serverless deploy --stage dev` 기준으로 DynamoDB table/IAM/API Gateway/Lambda 배포 흐름을 확인한다.
+5. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
+6. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
+7. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
 
 CI, Dockerfile, 배포 workflow는 실제 배포를 준비할 때 다시 다룬다.

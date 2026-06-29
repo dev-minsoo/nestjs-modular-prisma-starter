@@ -27,7 +27,7 @@ import { RequestIdMiddleware } from './request-id.middleware';
 export class LoggingModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(RequestIdMiddleware, RequestContextMiddleware).forRoutes({
-      path: '*',
+      path: '{*path}',
       method: RequestMethod.ALL,
     });
   }

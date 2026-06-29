@@ -5,7 +5,6 @@ import { HttpExceptionFilter } from '../common/errors';
 import { LoggingModule } from '../common/logging';
 import { RequestContextModule } from '../common/request-context';
 import { getEnvFilePaths, validateEnvironment } from '../config/environment';
-import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../modules/auth';
 import { HealthModule } from '../modules/health/health.module';
 import { TodosModule } from '../modules/todos/todos.module';
@@ -20,7 +19,6 @@ import { UsersModule } from '../modules/users/users.module';
     }),
     RequestContextModule,
     LoggingModule,
-    DatabaseModule,
     HealthModule,
     AuthModule,
     UsersModule,

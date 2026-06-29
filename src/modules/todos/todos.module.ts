@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../../database/database.module';
+import { PersistenceModule } from '../../persistence';
 import { TodosController } from './todos.controller';
 import { TodosService } from './todos.service';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [PersistenceModule],
   controllers: [TodosController],
   providers: [TodosService],
 })

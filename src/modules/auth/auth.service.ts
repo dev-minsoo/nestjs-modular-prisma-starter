@@ -1,16 +1,17 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordService } from '../../common/security';
 import {
-  PrismaService,
-  PrismaTransactionClient,
-} from '../../database/prisma.service';
-import { Prisma } from '../../generated/prisma/client';
-import { Role } from '../../generated/prisma/enums';
+  DuplicateUserEmailError,
+  USER_REPOSITORY,
+  type UserRepository,
+  type UserWithPassword,
+} from '../../persistence';
 import {
   toUserResponse,
   UserRecord,
@@ -22,14 +23,11 @@ import { SignupDto } from './dto/signup.dto';
 import type { AuthenticatedUser } from './types/authenticated-user.type';
 import type { JwtPayload } from './types/jwt-payload.type';
 
-type UserWithPassword = UserRecord & {
-  passwordHash: string;
-};
-
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
     private readonly passwordService: PasswordService,
     private readonly jwtService: JwtService,
   ) {}
@@ -38,37 +36,20 @@ export class AuthService {
     const passwordHash = await this.passwordService.hash(dto.password);
 
     try {
-      const user = await this.prisma.runInTransaction(
-        async (tx) => {
-          const role = await this.resolveSignupRole(tx);
-
-          return tx.user.create({
-            data: {
-              email: dto.email,
-              name: dto.name,
-              passwordHash,
-              role,
-            },
-          });
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          maxRetries: 2,
-        },
-      );
+      const user = await this.userRepository.createSignupUser({
+        email: dto.email,
+        name: dto.name,
+        passwordHash,
+      });
 
       return this.createAuthResponse(user);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleRepositoryError(error);
     }
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: dto.email,
-      },
-    });
+    const user = await this.userRepository.findByEmail(dto.email);
 
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
@@ -87,11 +68,7 @@ export class AuthService {
   }
 
   async getMe(currentUser: AuthenticatedUser): Promise<UserRecord> {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        id: currentUser.id,
-      },
-    });
+    const user = await this.userRepository.findById(currentUser.id);
 
     if (!user) {
       throw new UnauthorizedException('Authenticated user no longer exists');
@@ -117,21 +94,8 @@ export class AuthService {
     };
   }
 
-  private async resolveSignupRole(tx: PrismaTransactionClient): Promise<Role> {
-    const adminCount = await tx.user.count({
-      where: {
-        role: Role.ADMIN,
-      },
-    });
-
-    return adminCount === 0 ? Role.ADMIN : Role.USER;
-  }
-
-  private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+  private handleRepositoryError(error: unknown): never {
+    if (error instanceof DuplicateUserEmailError) {
       throw new ConflictException('A user with this email already exists');
     }
 

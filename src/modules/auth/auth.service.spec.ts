@@ -1,27 +1,16 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { PasswordService } from '../../common/security';
-import { PrismaService } from '../../database/prisma.service';
-import { Prisma } from '../../generated/prisma/client';
 import { Role } from '../../generated/prisma/enums';
+import {
+  DuplicateUserEmailError,
+  type UserRepository,
+} from '../../persistence';
 import { AuthService } from './auth.service';
-
-type TransactionClientMock = {
-  user: {
-    count: jest.Mock;
-    create: jest.Mock;
-  };
-};
 
 describe('AuthService', () => {
   let service: AuthService;
-  let transactionClient: TransactionClientMock;
-  let prisma: {
-    runInTransaction: jest.Mock;
-    user: {
-      findUnique: jest.Mock;
-    };
-  };
+  let userRepository: jest.Mocked<UserRepository>;
   let passwordService: jest.Mocked<Pick<PasswordService, 'compare' | 'hash'>>;
   let jwtService: {
     signAsync: jest.Mock;
@@ -47,19 +36,14 @@ describe('AuthService', () => {
   };
 
   beforeEach(() => {
-    transactionClient = {
-      user: {
-        count: jest.fn(),
-        create: jest.fn(),
-      },
-    };
-    prisma = {
-      runInTransaction: jest.fn((callback: TransactionCallback) =>
-        callback(transactionClient),
-      ),
-      user: {
-        findUnique: jest.fn(),
-      },
+    userRepository = {
+      create: jest.fn(),
+      createSignupUser: jest.fn(),
+      findAll: jest.fn(),
+      findById: jest.fn(),
+      findByEmail: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
     };
     passwordService = {
       hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -70,20 +54,19 @@ describe('AuthService', () => {
     };
 
     service = new AuthService(
-      prisma as unknown as PrismaService,
+      userRepository,
       passwordService,
       jwtService as unknown as JwtService,
     );
   });
 
-  it('signs up as ADMIN when no admin exists', async () => {
+  it('signs up with the repository resolved role', async () => {
     const adminUser = {
       ...sampleUser,
       role: Role.ADMIN,
     };
 
-    transactionClient.user.count.mockResolvedValue(0);
-    transactionClient.user.create.mockResolvedValue(adminUser);
+    userRepository.createSignupUser.mockResolvedValue(adminUser);
 
     await expect(
       service.signup({
@@ -101,51 +84,17 @@ describe('AuthService', () => {
       },
     });
 
-    expect(prisma.runInTransaction).toHaveBeenCalledWith(expect.any(Function), {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxRetries: 2,
-    });
-    expect(transactionClient.user.create).toHaveBeenCalledWith({
-      data: {
-        email: sampleUser.email,
-        name: sampleUser.name,
-        passwordHash: 'hashed-password',
-        role: Role.ADMIN,
-      },
-    });
-    expect(transactionClient.user.count).toHaveBeenCalledWith({
-      where: {
-        role: Role.ADMIN,
-      },
-    });
-  });
-
-  it('signs up as USER when an admin already exists', async () => {
-    transactionClient.user.count.mockResolvedValue(1);
-    transactionClient.user.create.mockResolvedValue(sampleUser);
-
-    await service.signup({
+    expect(passwordService.hash).toHaveBeenCalledWith('strong-password');
+    expect(userRepository.createSignupUser).toHaveBeenCalledWith({
       email: sampleUser.email,
       name: sampleUser.name,
-      password: 'strong-password',
+      passwordHash: 'hashed-password',
     });
-
-    expect(transactionClient.user.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          role: Role.USER,
-        }) as unknown,
-      }),
-    );
   });
 
   it('maps duplicate signup emails to ConflictException', async () => {
-    transactionClient.user.count.mockResolvedValue(1);
-    transactionClient.user.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('Duplicate email', {
-        code: 'P2002',
-        clientVersion: 'test',
-      }),
+    userRepository.createSignupUser.mockRejectedValue(
+      new DuplicateUserEmailError(),
     );
 
     await expect(
@@ -157,7 +106,7 @@ describe('AuthService', () => {
   });
 
   it('logs in with valid credentials', async () => {
-    prisma.user.findUnique.mockResolvedValue(sampleUser);
+    userRepository.findByEmail.mockResolvedValue(sampleUser);
     passwordService.compare.mockResolvedValue(true);
 
     await expect(
@@ -172,6 +121,7 @@ describe('AuthService', () => {
       user: sampleUserResponse,
     });
 
+    expect(userRepository.findByEmail).toHaveBeenCalledWith(sampleUser.email);
     expect(passwordService.compare).toHaveBeenCalledWith(
       'strong-password',
       sampleUser.passwordHash,
@@ -179,7 +129,7 @@ describe('AuthService', () => {
   });
 
   it('rejects missing users and invalid passwords', async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
+    userRepository.findByEmail.mockResolvedValue(null);
 
     await expect(
       service.login({
@@ -188,7 +138,7 @@ describe('AuthService', () => {
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
-    prisma.user.findUnique.mockResolvedValue(sampleUser);
+    userRepository.findByEmail.mockResolvedValue(sampleUser);
     passwordService.compare.mockResolvedValue(false);
 
     await expect(
@@ -200,7 +150,7 @@ describe('AuthService', () => {
   });
 
   it('returns the current user without passwordHash', async () => {
-    prisma.user.findUnique.mockResolvedValue(sampleUser);
+    userRepository.findById.mockResolvedValue(sampleUser);
 
     await expect(
       service.getMe({
@@ -211,5 +161,3 @@ describe('AuthService', () => {
     ).resolves.toEqual(sampleUserResponse);
   });
 });
-
-type TransactionCallback = (tx: TransactionClientMock) => Promise<unknown>;

@@ -1,26 +1,13 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '../../generated/prisma/client';
 import { Role } from '../../generated/prisma/enums';
-import { PrismaService } from '../../database/prisma.service';
+import { TodoNotFoundError, type TodoRepository } from '../../persistence';
 import type { AuthenticatedUser } from '../auth';
 import { ListTodosQueryDto } from './dto/list-todos-query.dto';
 import { TodosService } from './todos.service';
 
-type PrismaTodoMock = {
-  create: jest.Mock;
-  findMany: jest.Mock;
-  count: jest.Mock;
-  findUnique: jest.Mock;
-  update: jest.Mock;
-  delete: jest.Mock;
-};
-
 describe('TodosService', () => {
   let service: TodosService;
-  let prisma: {
-    $transaction: jest.Mock;
-    todo: PrismaTodoMock;
-  };
+  let todoRepository: jest.Mocked<TodoRepository>;
 
   const now = new Date('2026-06-16T05:00:00.000Z');
   const owner: AuthenticatedUser = {
@@ -51,32 +38,20 @@ describe('TodosService', () => {
     ...sampleTodo,
   };
 
-  const prismaError = (code: string) =>
-    new Prisma.PrismaClientKnownRequestError('Prisma request failed', {
-      code,
-      clientVersion: 'test',
-    });
-
   beforeEach(() => {
-    prisma = {
-      $transaction: jest.fn((queries: Promise<unknown>[]) =>
-        Promise.all(queries),
-      ),
-      todo: {
-        create: jest.fn(),
-        findMany: jest.fn(),
-        count: jest.fn(),
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-      },
+    todoRepository = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
     };
 
-    service = new TodosService(prisma as unknown as PrismaService);
+    service = new TodosService(todoRepository);
   });
 
   it('creates a todo owned by the current user', async () => {
-    prisma.todo.create.mockResolvedValue(sampleTodo);
+    todoRepository.create.mockResolvedValue(sampleTodo);
 
     await expect(
       service.create(owner, {
@@ -85,18 +60,18 @@ describe('TodosService', () => {
       }),
     ).resolves.toEqual(sampleTodoResponse);
 
-    expect(prisma.todo.create).toHaveBeenCalledWith({
-      data: {
-        title: sampleTodo.title,
-        description: sampleTodo.description,
-        ownerId: owner.id,
-      },
+    expect(todoRepository.create).toHaveBeenCalledWith({
+      title: sampleTodo.title,
+      description: sampleTodo.description,
+      ownerId: owner.id,
     });
   });
 
   it('lists only the current user todos for regular users', async () => {
-    prisma.todo.findMany.mockResolvedValue([sampleTodo]);
-    prisma.todo.count.mockResolvedValue(1);
+    todoRepository.findAll.mockResolvedValue({
+      items: [sampleTodo],
+      total: 1,
+    });
 
     await expect(service.findAll(owner)).resolves.toEqual({
       items: [sampleTodoResponse],
@@ -108,14 +83,15 @@ describe('TodosService', () => {
       },
     });
 
-    const where = { AND: [{ ownerId: owner.id }] };
-    expect(prisma.todo.findMany).toHaveBeenCalledWith({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: 0,
-      take: 20,
-    });
-    expect(prisma.todo.count).toHaveBeenCalledWith({ where });
+    expect(todoRepository.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 1,
+        pageSize: 20,
+        orderBy: 'createdAt',
+        orderDirection: 'desc',
+        ownerId: owner.id,
+      }),
+    );
   });
 
   it('lets admins list todos across owners with filters', async () => {
@@ -127,30 +103,11 @@ describe('TodosService', () => {
       orderBy: 'title',
       orderDirection: 'asc',
     };
-    const where = {
-      AND: [
-        {
-          OR: [
-            {
-              title: {
-                contains: 'docs',
-                mode: 'insensitive',
-              },
-            },
-            {
-              description: {
-                contains: 'docs',
-                mode: 'insensitive',
-              },
-            },
-          ],
-        },
-        { completed: false },
-      ],
-    };
 
-    prisma.todo.findMany.mockResolvedValue([sampleTodo]);
-    prisma.todo.count.mockResolvedValue(6);
+    todoRepository.findAll.mockResolvedValue({
+      items: [sampleTodo],
+      total: 6,
+    });
 
     await expect(service.findAll(admin, query)).resolves.toEqual({
       items: [sampleTodoResponse],
@@ -162,28 +119,23 @@ describe('TodosService', () => {
       },
     });
 
-    expect(prisma.todo.findMany).toHaveBeenCalledWith({
-      where,
-      orderBy: { title: 'asc' },
-      skip: 5,
-      take: 5,
+    expect(todoRepository.findAll).toHaveBeenCalledWith({
+      ...query,
+      ownerId: undefined,
     });
-    expect(prisma.todo.count).toHaveBeenCalledWith({ where });
   });
 
   it('finds a todo for its owner', async () => {
-    prisma.todo.findUnique.mockResolvedValue(sampleTodo);
+    todoRepository.findById.mockResolvedValue(sampleTodo);
 
     await expect(service.findOne(owner, sampleTodo.id)).resolves.toEqual(
       sampleTodoResponse,
     );
-    expect(prisma.todo.findUnique).toHaveBeenCalledWith({
-      where: { id: sampleTodo.id },
-    });
+    expect(todoRepository.findById).toHaveBeenCalledWith(sampleTodo.id);
   });
 
   it('lets admins access todos owned by other users', async () => {
-    prisma.todo.findUnique.mockResolvedValue(sampleTodo);
+    todoRepository.findById.mockResolvedValue(sampleTodo);
 
     await expect(service.findOne(admin, sampleTodo.id)).resolves.toEqual(
       sampleTodoResponse,
@@ -191,7 +143,7 @@ describe('TodosService', () => {
   });
 
   it('throws NotFoundException when a todo is missing', async () => {
-    prisma.todo.findUnique.mockResolvedValue(null);
+    todoRepository.findById.mockResolvedValue(null);
 
     await expect(service.findOne(owner, sampleTodo.id)).rejects.toBeInstanceOf(
       NotFoundException,
@@ -199,7 +151,7 @@ describe('TodosService', () => {
   });
 
   it('throws ForbiddenException when a user accesses another user todo', async () => {
-    prisma.todo.findUnique.mockResolvedValue(sampleTodo);
+    todoRepository.findById.mockResolvedValue(sampleTodo);
 
     await expect(
       service.findOne(otherUser, sampleTodo.id),
@@ -207,8 +159,8 @@ describe('TodosService', () => {
   });
 
   it('updates a todo for its owner', async () => {
-    prisma.todo.findUnique.mockResolvedValue(sampleTodo);
-    prisma.todo.update.mockResolvedValue({
+    todoRepository.findById.mockResolvedValue(sampleTodo);
+    todoRepository.update.mockResolvedValue({
       ...sampleTodo,
       completed: true,
     });
@@ -220,15 +172,16 @@ describe('TodosService', () => {
       completed: true,
     });
 
-    expect(prisma.todo.update).toHaveBeenCalledWith({
-      where: { id: sampleTodo.id },
-      data: { completed: true },
+    expect(todoRepository.update).toHaveBeenCalledWith(sampleTodo.id, {
+      completed: true,
     });
   });
 
   it('maps update missing-record errors to NotFoundException', async () => {
-    prisma.todo.findUnique.mockResolvedValue(sampleTodo);
-    prisma.todo.update.mockRejectedValue(prismaError('P2025'));
+    todoRepository.findById.mockResolvedValue(sampleTodo);
+    todoRepository.update.mockRejectedValue(
+      new TodoNotFoundError(sampleTodo.id),
+    );
 
     await expect(
       service.update(owner, sampleTodo.id, { completed: true }),
@@ -236,15 +189,13 @@ describe('TodosService', () => {
   });
 
   it('removes a todo for an admin', async () => {
-    prisma.todo.findUnique.mockResolvedValue(sampleTodo);
-    prisma.todo.delete.mockResolvedValue(sampleTodo);
+    todoRepository.findById.mockResolvedValue(sampleTodo);
+    todoRepository.delete.mockResolvedValue(sampleTodo);
 
     await expect(service.remove(admin, sampleTodo.id)).resolves.toEqual(
       sampleTodoResponse,
     );
 
-    expect(prisma.todo.delete).toHaveBeenCalledWith({
-      where: { id: sampleTodo.id },
-    });
+    expect(todoRepository.delete).toHaveBeenCalledWith(sampleTodo.id);
   });
 });

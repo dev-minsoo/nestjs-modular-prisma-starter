@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { SecurityModule } from '../../common/security';
-import { DatabaseModule } from '../../database/database.module';
+import { PersistenceModule } from '../../persistence';
 import {
   ACCESS_TOKEN_EXPIRES_IN,
   JWT_STRATEGY_NAME,
@@ -16,7 +16,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    DatabaseModule,
+    PersistenceModule,
     SecurityModule,
     PassportModule.register({ defaultStrategy: JWT_STRATEGY_NAME }),
     JwtModule.registerAsync({

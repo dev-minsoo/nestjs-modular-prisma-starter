@@ -1,29 +1,28 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PasswordService } from '../../common/security';
-import {
-  createPaginatedResult,
-  getPaginationParams,
-} from '../../common/pagination';
-import { Prisma } from '../../generated/prisma/client';
+import { createPaginatedResult } from '../../common/pagination';
 import { Role } from '../../generated/prisma/enums';
-import { PrismaService } from '../../database/prisma.service';
-import { CreateUserDto } from './dto/create-user.dto';
 import {
-  ListUsersQueryDto,
-  UserListOrderBy,
-  UserListOrderDirection,
-} from './dto/list-users-query.dto';
+  DuplicateUserEmailError,
+  USER_REPOSITORY,
+  UserNotFoundError,
+  type UserRepository,
+} from '../../persistence';
+import { CreateUserDto } from './dto/create-user.dto';
+import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { toUserResponse } from './utils/user-response.mapper';
 
 @Injectable()
 export class UsersService {
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
     private readonly passwordService: PasswordService,
   ) {}
 
@@ -31,42 +30,27 @@ export class UsersService {
     const passwordHash = await this.passwordService.hash(dto.password);
 
     try {
-      const user = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          name: dto.name,
-          passwordHash,
-          role: dto.role ?? Role.USER,
-        },
+      const user = await this.userRepository.create({
+        email: dto.email,
+        name: dto.name,
+        passwordHash,
+        role: dto.role ?? Role.USER,
       });
 
       return toUserResponse(user);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleRepositoryError(error);
     }
   }
 
   async findAll(query: ListUsersQueryDto = new ListUsersQueryDto()) {
-    const where = this.buildWhere(query.search);
-    const orderBy = this.buildOrderBy(query.orderBy, query.orderDirection);
-    const pagination = getPaginationParams(query);
-
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.user.findMany({
-        where,
-        orderBy,
-        ...pagination,
-      }),
-      this.prisma.user.count({ where }),
-    ]);
+    const { items, total } = await this.userRepository.findAll(query);
 
     return createPaginatedResult(items.map(toUserResponse), total, query);
   }
 
   async findOne(id: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-    });
+    const user = await this.userRepository.findById(id);
 
     if (!user) {
       throw new NotFoundException(`User ${id} was not found`);
@@ -77,82 +61,30 @@ export class UsersService {
 
   async update(id: string, dto: UpdateUserDto) {
     try {
-      const user = await this.prisma.user.update({
-        where: { id },
-        data: dto,
-      });
+      const user = await this.userRepository.update(id, dto);
 
       return toUserResponse(user);
     } catch (error) {
-      this.handlePrismaError(error, id);
+      this.handleRepositoryError(error, id);
     }
   }
 
   async remove(id: string) {
     try {
-      const user = await this.prisma.user.delete({
-        where: { id },
-      });
+      const user = await this.userRepository.delete(id);
 
       return toUserResponse(user);
     } catch (error) {
-      this.handlePrismaError(error, id);
+      this.handleRepositoryError(error, id);
     }
   }
 
-  private buildWhere(search?: string): Prisma.UserWhereInput | undefined {
-    const trimmedSearch = search?.trim();
-
-    if (!trimmedSearch) {
-      return undefined;
-    }
-
-    return {
-      OR: [
-        {
-          email: {
-            contains: trimmedSearch,
-            mode: 'insensitive',
-          },
-        },
-        {
-          name: {
-            contains: trimmedSearch,
-            mode: 'insensitive',
-          },
-        },
-      ],
-    };
-  }
-
-  private buildOrderBy(
-    orderBy: UserListOrderBy,
-    orderDirection: UserListOrderDirection,
-  ): Prisma.UserOrderByWithRelationInput {
-    switch (orderBy) {
-      case 'email':
-        return { email: orderDirection };
-      case 'name':
-        return { name: orderDirection };
-      case 'updatedAt':
-        return { updatedAt: orderDirection };
-      case 'createdAt':
-        return { createdAt: orderDirection };
-    }
-  }
-
-  private handlePrismaError(error: unknown, id?: string): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+  private handleRepositoryError(error: unknown, id?: string): never {
+    if (error instanceof DuplicateUserEmailError) {
       throw new ConflictException('A user with this email already exists');
     }
 
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2025'
-    ) {
+    if (error instanceof UserNotFoundError) {
       throw new NotFoundException(
         id ? `User ${id} was not found` : 'User was not found',
       );

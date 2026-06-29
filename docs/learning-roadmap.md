@@ -9,7 +9,7 @@
 현재 샘플은 다음 흐름을 중심으로 구성되어 있다.
 
 ```text
-Controller -> Service -> Prisma -> PostgreSQL
+Controller -> Service -> Repository port -> Prisma adapter -> PostgreSQL
 ```
 
 각 구성 요소의 역할은 다음과 같다.
@@ -18,6 +18,8 @@ Controller -> Service -> Prisma -> PostgreSQL
 - `Service`: 비즈니스 로직과 데이터 접근 조율
 - `Module`: 기능 단위 조립과 dependency injection 설정
 - `DTO`: request/response 데이터 구조와 validation
+- `Repository port`: service layer가 의존하는 persistence contract
+- `Prisma repository adapter`: PostgreSQL/Prisma용 repository 구현
 - `PrismaService`: Prisma Client를 NestJS provider로 연결하는 DB 접근 계층
 - `ConfigModule`: 실행 환경별 설정을 로딩하는 계층
 
@@ -40,6 +42,7 @@ Spring Boot와의 비교는 `docs/nestjs-spring-boot-comparison.md`에, NestJS d
 - common HTTP error response format
 - DTO validation
 - Prisma known error mapping
+- repository port와 Prisma adapter 기반 persistence boundary
 - Swagger/OpenAPI 문서
 - signup/login, JWT access token, role guard
 - Prisma transaction helper와 signup transaction boundary
@@ -153,6 +156,8 @@ Status: Todo relational model complete.
 
 현재 transaction boundary 예제는 `AuthService.signup()`에 있다. `ADMIN` 사용자 수 조회와 user 생성을 `PrismaService.runInTransaction()`으로 묶고, `Serializable` isolation과 retry를 사용한다. Spring `@Transactional`과의 비교는 `docs/nestjs-prisma-transactions.md`에 정리한다.
 
+현재 구현에서는 이 transaction boundary가 `PrismaUserRepository.createSignupUser()` 안에 있다. `AuthService`는 signup use case와 token 발급을 담당하고, first-admin role 결정과 Prisma transaction 세부사항은 PostgreSQL adapter가 담당한다.
+
 ### Phase 5. Authentication
 
 기본 구조가 익숙해진 뒤 인증을 추가한다.
@@ -227,14 +232,41 @@ Request context는 `common/request-context` 아래에 있으며, Spring의 MDC�
 
 이 단계는 학습용 샘플을 작은 production-like API로 발전시키는 과정이다.
 
+### Phase 8. Serverless And NoSQL Persistence Track
+
+AWS Serverless Architecture를 비교 학습하기 위한 별도 persistence track을 추가한다.
+
+Status: repository boundary added; DynamoDB adapter not implemented yet.
+
+- `USER_REPOSITORY`, `TODO_REPOSITORY` port 기준으로 Prisma adapter와 DynamoDB adapter를 나란히 구성한다.
+- Prisma/PostgreSQL 트랙은 relation, migration, transaction, foreign key, offset pagination을 실습한다.
+- DynamoDB 트랙은 access pattern, conditional write, transaction write, cursor pagination, LocalStack 테스트를 실습한다.
+- NestJS HTTP layer는 되도록 공유하되, persistence adapter와 infrastructure 설정은 명확히 분리한다.
+- Lambda/API Gateway 진입점은 repository boundary가 안정화된 뒤 추가한다.
+
+초기 DynamoDB 설계 후보는 다음과 같다.
+
+```text
+Table: app-local
+
+USER#{userId}                  -> user profile
+EMAIL#{email}                  -> unique email guard
+TODO#{todoId}                  -> todo record
+USER#{userId} / TODO#{todoId}  -> owner-scoped todo lookup item or GSI candidate
+```
+
+`email` unique 보장은 DynamoDB에서 RDB unique index처럼 자동 처리되지 않으므로 conditional write 또는 transaction write로 별도 구현한다. User 삭제 시 Todo cascade delete도 애플리케이션 로직 또는 별도 cleanup workflow로 모델링해야 한다.
+
 ## Suggested Next Step
 
 현재 학습 방향은 배포 준비보다 Spring Boot와 비교되는 NestJS runtime/application 구조를 하나씩 익히는 쪽이다.
 
 추천 우선순위는 다음과 같다.
 
-1. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
-2. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
-3. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
+1. DynamoDB adapter skeleton: LocalStack, AWS SDK DocumentClient, repository provider switch를 추가한다.
+2. DynamoDB access pattern 검증: signup email uniqueness, todo owner query, admin list query를 어떤 방식으로 풀지 비교한다.
+3. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
+4. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
+5. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
 
 CI, Dockerfile, 배포 workflow는 실제 배포를 준비할 때 다시 다룬다.

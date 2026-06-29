@@ -10,6 +10,7 @@ NestJS 입문용 서버 애플리케이션 샘플입니다. 공식 Nest CLI 프�
 - Express adapter, NestJS default
 - PostgreSQL
 - Prisma ORM
+- Repository-based persistence boundary
 - Swagger/OpenAPI
 - Docker Compose
 - Jest
@@ -31,6 +32,13 @@ src/
   database/
     database.module.ts
     prisma.service.ts
+  persistence/
+    persistence.module.ts
+    user.repository.ts
+    todo.repository.ts
+    prisma/
+      prisma-user.repository.ts
+      prisma-todo.repository.ts
   modules/
     auth/
     health/
@@ -58,13 +66,22 @@ src/
 - `common/request-context`: AsyncLocalStorage-based request context
 - `common/security`: password hashing helper
 - `config/environment.ts`: environment profile loading and validation
+- `persistence`: service layer가 의존하는 repository port와 Prisma adapter
 - `auth`: signup/login, JWT strategy, auth/role guards
 - `todos.controller.ts`: authenticated todo HTTP endpoints
-- `todos.service.ts`: todo ownership, authorization, and database access coordination
+- `todos.service.ts`: todo ownership, authorization, and repository coordination
 - `prisma.service.ts`: Prisma Client provider
 - `users.controller.ts`: users HTTP endpoints
-- `users.service.ts`: users business logic and database access coordination
+- `users.service.ts`: users business logic and repository coordination
 - `dto/*.ts`: request, query, response DTOs
+
+현재 persistence 흐름은 다음과 같습니다.
+
+```text
+Controller -> Service -> Repository port -> Prisma adapter -> PostgreSQL
+```
+
+`UsersService`, `TodosService`, `AuthService`는 Prisma Client를 직접 사용하지 않고 `USER_REPOSITORY`, `TODO_REPOSITORY` token에 의존합니다. 이후 DynamoDB/LocalStack 트랙은 같은 repository port를 구현하는 adapter를 추가하는 방식으로 붙일 수 있습니다.
 
 ## Learning Docs
 

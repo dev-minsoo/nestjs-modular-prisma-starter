@@ -10,6 +10,7 @@ NestJS 입문용 서버 애플리케이션 샘플입니다. 공식 Nest CLI 프�
 - Express adapter, NestJS default
 - PostgreSQL
 - Prisma ORM
+- DynamoDB adapter for LocalStack experiments
 - Repository-based persistence boundary
 - Swagger/OpenAPI
 - Docker Compose
@@ -36,6 +37,9 @@ src/
     persistence.module.ts
     user.repository.ts
     todo.repository.ts
+    dynamo/
+      dynamo-user.repository.ts
+      dynamo-todo.repository.ts
     prisma/
       prisma-user.repository.ts
       prisma-todo.repository.ts
@@ -75,13 +79,13 @@ src/
 - `users.service.ts`: users business logic and repository coordination
 - `dto/*.ts`: request, query, response DTOs
 
-현재 persistence 흐름은 다음과 같습니다.
+현재 기본 persistence 흐름은 다음과 같습니다.
 
 ```text
 Controller -> Service -> Repository port -> Prisma adapter -> PostgreSQL
 ```
 
-`UsersService`, `TodosService`, `AuthService`는 Prisma Client를 직접 사용하지 않고 `USER_REPOSITORY`, `TODO_REPOSITORY` token에 의존합니다. 이후 DynamoDB/LocalStack 트랙은 같은 repository port를 구현하는 adapter를 추가하는 방식으로 붙일 수 있습니다.
+`UsersService`, `TodosService`, `AuthService`는 Prisma Client를 직접 사용하지 않고 `USER_REPOSITORY`, `TODO_REPOSITORY` token에 의존합니다. `PERSISTENCE_DRIVER=prisma|dynamo`로 Prisma/PostgreSQL 또는 DynamoDB adapter를 선택할 수 있습니다.
 
 ## Learning Docs
 
@@ -109,6 +113,24 @@ Test database:
 npm run test:e2e
 ```
 
+DynamoDB with LocalStack:
+
+```bash
+npm run docker:localstack:up
+npm run dynamo:local:create-table
+PERSISTENCE_DRIVER=dynamo npm run start:local
+```
+
+LocalStack DynamoDB는 기본적으로 다음 설정을 사용합니다.
+
+```text
+DYNAMODB_ENDPOINT=http://localhost:4566
+DYNAMODB_TABLE_NAME=nestjs-modular-local
+AWS_REGION=us-east-1
+```
+
+현재 DynamoDB adapter는 비교 학습용 1차 구현입니다. `email` unique 보장은 lookup item과 conditional transaction으로 처리하고, list search/order/pagination은 작은 local dataset을 전제로 scan 후 in-memory 처리합니다. 실제 운영형 DynamoDB 모델에서는 access pattern별 key/GSI 설계를 별도로 잡아야 합니다.
+
 Swagger UI:
 
 ```text
@@ -134,7 +156,7 @@ Health response 예시:
 }
 ```
 
-`/api/health`는 가벼운 Prisma query로 database 연결을 확인합니다. Database 확인에 실패하면 `503 Service Unavailable`과 함께 `checks.database: "error"`를 반환합니다.
+`/api/health`는 현재 선택된 persistence adapter의 database 연결을 확인합니다. Prisma 모드에서는 PostgreSQL query를, DynamoDB 모드에서는 DynamoDB table describe를 사용합니다. Database 확인에 실패하면 `503 Service Unavailable`과 함께 `checks.database: "error"`를 반환합니다.
 
 Auth API:
 
@@ -336,7 +358,7 @@ prod:  .env.prod.local -> .env.prod -> .env
 test:  .env.test.local -> .env.test
 ```
 
-`APP_ENV`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`, `JWT_ACCESS_TOKEN_SECRET`을 사용할 수 있습니다. `DATABASE_URL`은 `test`를 제외한 profile에서 필수이며 누락되거나 PostgreSQL URL이 아니면 앱이 부팅에 실패합니다. `APP_ENV=test`는 기본 test DB URL인 `postgresql://nest:nest@localhost:5433/nestjs_modular_test?schema=public`을 사용하며, `.env.test.local` 또는 `.env.test`로 override할 수 있습니다. `JWT_ACCESS_TOKEN_SECRET`은 `test`를 제외한 profile에서 필수입니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
+`APP_ENV`, `PERSISTENCE_DRIVER`, `PORT`, `DATABASE_URL`, `CORS_ORIGIN`, `JWT_ACCESS_TOKEN_SECRET`, `AWS_REGION`, `DYNAMODB_ENDPOINT`, `DYNAMODB_TABLE_NAME`을 사용할 수 있습니다. `PERSISTENCE_DRIVER`는 기본값이 `prisma`이며 `prisma` 또는 `dynamo`를 지원합니다. Prisma 모드에서는 `DATABASE_URL`이 필수이고 PostgreSQL URL이어야 합니다. DynamoDB 모드에서는 `DATABASE_URL` 없이 실행할 수 있으며 DynamoDB 설정을 사용합니다. `APP_ENV=test`와 Prisma 모드는 기본 test DB URL인 `postgresql://nest:nest@localhost:5433/nestjs_modular_test?schema=public`을 사용하며, `.env.test.local` 또는 `.env.test`로 override할 수 있습니다. `JWT_ACCESS_TOKEN_SECRET`은 `test`를 제외한 profile에서 필수입니다. `CORS_ORIGIN`은 쉼표로 여러 origin을 지정할 수 있습니다.
 
 Example:
 

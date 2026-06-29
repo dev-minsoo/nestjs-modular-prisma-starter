@@ -236,11 +236,11 @@ Request context는 `common/request-context` 아래에 있으며, Spring의 MDC�
 
 AWS Serverless Architecture를 비교 학습하기 위한 별도 persistence track을 추가한다.
 
-Status: repository boundary added; DynamoDB adapter not implemented yet.
+Status: repository boundary and initial DynamoDB/LocalStack adapter added.
 
 - `USER_REPOSITORY`, `TODO_REPOSITORY` port 기준으로 Prisma adapter와 DynamoDB adapter를 나란히 구성한다.
 - Prisma/PostgreSQL 트랙은 relation, migration, transaction, foreign key, offset pagination을 실습한다.
-- DynamoDB 트랙은 access pattern, conditional write, transaction write, cursor pagination, LocalStack 테스트를 실습한다.
+- DynamoDB 트랙은 LocalStack, conditional write, transaction write, scan 기반 baseline을 먼저 실습한다.
 - NestJS HTTP layer는 되도록 공유하되, persistence adapter와 infrastructure 설정은 명확히 분리한다.
 - Lambda/API Gateway 진입점은 repository boundary가 안정화된 뒤 추가한다.
 
@@ -257,16 +257,26 @@ USER#{userId} / TODO#{todoId}  -> owner-scoped todo lookup item or GSI candidate
 
 `email` unique 보장은 DynamoDB에서 RDB unique index처럼 자동 처리되지 않으므로 conditional write 또는 transaction write로 별도 구현한다. User 삭제 시 Todo cascade delete도 애플리케이션 로직 또는 별도 cleanup workflow로 모델링해야 한다.
 
+현재 DynamoDB adapter는 다음 의도적인 단순화를 포함한다.
+
+- `pk` 하나만 가진 single-table baseline을 사용한다.
+- users/todos list는 scan 후 애플리케이션 메모리에서 filter/order/pagination을 수행한다.
+- user 삭제 시 owner todo를 scan 후 삭제한다.
+- `ADMIN` 최초 가입은 `META#ADMIN` marker item과 transaction write로 보호한다.
+
+이 단순화는 RDB와 DynamoDB의 모델링 차이를 먼저 드러내기 위한 것이다. 다음 단계에서는 owner별 todo 조회, admin list, search, cursor pagination을 기준으로 GSI 또는 별도 item pattern을 설계한다.
+
 ## Suggested Next Step
 
 현재 학습 방향은 배포 준비보다 Spring Boot와 비교되는 NestJS runtime/application 구조를 하나씩 익히는 쪽이다.
 
 추천 우선순위는 다음과 같다.
 
-1. DynamoDB adapter skeleton: LocalStack, AWS SDK DocumentClient, repository provider switch를 추가한다.
-2. DynamoDB access pattern 검증: signup email uniqueness, todo owner query, admin list query를 어떤 방식으로 풀지 비교한다.
-3. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
-4. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
-5. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
+1. DynamoDB access pattern 개선: owner todo query, admin list query, email lookup을 GSI/item pattern으로 재설계한다.
+2. DynamoDB cursor pagination: 현재 page/pageSize 응답과 DynamoDB `LastEvaluatedKey` 기반 cursor 응답의 차이를 비교한다.
+3. Lambda/API Gateway entrypoint: NestJS app을 Lambda handler로 감싸고 serverless-local 또는 LocalStack API Gateway 실습을 추가한다.
+4. 관계형 모델링 확장: Todo에 tag, due date, priority 같은 작은 요구사항을 추가해 query 조건과 migration 변경을 실습한다.
+5. audit logging: request context의 `currentUserId`를 이용해 변경 이력 기록을 실습한다.
+6. CI: GitHub Actions에서 build, unit test, DB-backed e2e test를 반복 실행한다.
 
 CI, Dockerfile, 배포 workflow는 실제 배포를 준비할 때 다시 다룬다.

@@ -1,21 +1,19 @@
-import { PrismaService } from '../../database/prisma.service';
+import type { HealthRepository } from '../../persistence';
 import { HealthService } from './health.service';
 
 describe('HealthService', () => {
   let service: HealthService;
-  let prisma: {
-    $queryRaw: jest.Mock;
-  };
+  let healthRepository: jest.Mocked<HealthRepository>;
 
   beforeEach(() => {
-    prisma = {
-      $queryRaw: jest.fn(),
+    healthRepository = {
+      checkDatabase: jest.fn(),
     };
-    service = new HealthService(prisma as unknown as PrismaService);
+    service = new HealthService(healthRepository);
   });
 
   it('returns ok when the database responds', async () => {
-    prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }]);
+    healthRepository.checkDatabase.mockResolvedValue(true);
 
     await expect(service.getHealth()).resolves.toEqual(
       expect.objectContaining({
@@ -27,11 +25,11 @@ describe('HealthService', () => {
         timestamp: expect.any(String) as unknown,
       }),
     );
-    expect(prisma.$queryRaw).toHaveBeenCalled();
+    expect(healthRepository.checkDatabase).toHaveBeenCalled();
   });
 
   it('returns error when the database query fails', async () => {
-    prisma.$queryRaw.mockRejectedValue(new Error('database unavailable'));
+    healthRepository.checkDatabase.mockResolvedValue(false);
 
     await expect(service.getHealth()).resolves.toEqual(
       expect.objectContaining({

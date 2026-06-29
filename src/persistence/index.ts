@@ -1,3 +1,4 @@
+export * from './health.repository';
 export * from './persistence.module';
 export * from './repository-errors';
 export * from './todo.repository';

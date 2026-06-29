@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { PersistenceDriver } from '../config/environment';
 import { Prisma, PrismaClient } from '../generated/prisma/client';
 
 export type PrismaTransactionClient = Prisma.TransactionClient;
@@ -16,17 +17,31 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  private readonly enabled: boolean;
+
   constructor(configService: ConfigService) {
-    super({
-      datasourceUrl: configService.getOrThrow<string>('DATABASE_URL'),
-    });
+    const databaseUrl = configService.get<string>('DATABASE_URL');
+
+    super(databaseUrl ? { datasourceUrl: databaseUrl } : {});
+
+    this.enabled =
+      configService.getOrThrow<PersistenceDriver>('PERSISTENCE_DRIVER') ===
+      'prisma';
   }
 
   async onModuleInit() {
+    if (!this.enabled) {
+      return;
+    }
+
     await this.$connect();
   }
 
   async onModuleDestroy() {
+    if (!this.enabled) {
+      return;
+    }
+
     await this.$disconnect();
   }
 

@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
+import { Inject, Injectable } from '@nestjs/common';
+import { HEALTH_REPOSITORY, type HealthRepository } from '../../persistence';
 
 export type HealthStatus = 'error' | 'ok';
 
@@ -14,7 +14,10 @@ export type HealthResponse = {
 
 @Injectable()
 export class HealthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(HEALTH_REPOSITORY)
+    private readonly healthRepository: HealthRepository,
+  ) {}
 
   async getHealth(): Promise<HealthResponse> {
     const database = await this.checkDatabase();
@@ -30,12 +33,6 @@ export class HealthService {
   }
 
   private async checkDatabase(): Promise<HealthStatus> {
-    try {
-      await this.prisma.$queryRaw`SELECT 1`;
-
-      return 'ok';
-    } catch {
-      return 'error';
-    }
+    return (await this.healthRepository.checkDatabase()) ? 'ok' : 'error';
   }
 }

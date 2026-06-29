@@ -10,6 +10,7 @@ describe('PrismaService', () => {
     const connect = jest.fn().mockResolvedValue(undefined);
     const service = createPrismaService({
       $connect: connect,
+      enabled: true,
     });
 
     await service.onModuleInit();
@@ -21,6 +22,7 @@ describe('PrismaService', () => {
     const disconnect = jest.fn().mockResolvedValue(undefined);
     const service = createPrismaService({
       $disconnect: disconnect,
+      enabled: true,
     });
 
     await service.onModuleDestroy();
@@ -80,11 +82,13 @@ describe('PrismaService', () => {
     $connect?: jest.Mock;
     $disconnect?: jest.Mock;
     $transaction?: jest.Mock;
+    enabled?: boolean;
   }): PrismaService {
     return Object.assign(Object.create(PrismaService.prototype), {
       $connect: jest.fn().mockResolvedValue(undefined),
       $disconnect: jest.fn().mockResolvedValue(undefined),
       $transaction: jest.fn(),
+      enabled: true,
       ...methods,
     }) as PrismaService;
   }

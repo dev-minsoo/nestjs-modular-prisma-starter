@@ -35,6 +35,30 @@ services:
       timeout: 3s
       retries: 10
 
+  localstack:
+    image: localstack/localstack:3
+    container_name: nestjs-modular-prisma-localstack
+    profiles:
+      - localstack
+    ports:
+      - '4566:4566'
+    environment:
+      SERVICES: dynamodb
+      AWS_DEFAULT_REGION: us-east-1
+      PERSISTENCE: '1'
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl -fs http://localhost:4566/_localstack/health | grep dynamodb',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
   postgres_data:
   postgres_test_data:
+  localstack_data:

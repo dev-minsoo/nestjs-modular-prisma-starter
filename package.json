@@ -17,6 +17,8 @@
     "start:prod": "APP_ENV=prod node dist/src/main.js",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "docker:localstack:up": "docker compose --profile localstack up -d localstack",
+    "dynamo:local:create-table": "node scripts/create-local-dynamo-table.js",
     "docker:test:up": "docker compose --profile test up -d postgres-test",
     "docker:test:wait": "node scripts/wait-for-test-db.js",
     "docker:test:down": "docker compose rm -sf postgres-test",
@@ -34,6 +36,8 @@
     "test:e2e": "npm run docker:test:up && npm run docker:test:wait && APP_ENV=test prisma generate && APP_ENV=test prisma migrate deploy && APP_ENV=test jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1075.0",
+    "@aws-sdk/lib-dynamodb": "^3.1075.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
